@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { WEEK_DAYS, WEEKMENU_SLOT } from "../../lib/weekmenu";
+import { mergeIntoShoppingList } from "../../lib/shopping-list-storage";
 import { supabaseBrowser } from "../../lib/supabase";
+import { WEEK_DAYS, WEEKMENU_SLOT } from "../../lib/weekmenu";
 
 type RecipeSummary = {
   id: number;
@@ -27,7 +28,9 @@ export default function WeekMenuPage() {
   const [loading, setLoading] = useState(false);
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const itemMap = useMemo(() => {
     const map = new Map<string, WeekMenuItem>();
@@ -148,6 +151,7 @@ export default function WeekMenuPage() {
     const key = `${day}:${WEEKMENU_SLOT}`;
     setSavingKey(key);
     setError(null);
+    setMessage(null);
     try {
       const {
         data: { user }
@@ -173,6 +177,43 @@ export default function WeekMenuPage() {
     }
   };
 
+  const exportToShoppingList = async () => {
+    setExporting(true);
+    setError(null);
+    setMessage(null);
+
+    try {
+      const {
+        data: { user }
+      } = await supabaseBrowser.auth.getUser();
+      if (!user) throw new Error("Please sign in first.");
+
+      const params = new URLSearchParams({ userId: user.id });
+      if (weekStart) {
+        params.set("week_start", weekStart);
+      }
+
+      const res = await fetch(`/api/shopping-list?${params.toString()}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to export shopping list");
+      }
+
+      const merged = mergeIntoShoppingList(
+        user.id,
+        (data.items ?? []).map((item: any) => ({ ...item, checked: false, isCustom: false }))
+      );
+
+      setMessage(
+        `Exported ${(data.items ?? []).length} ingredient${(data.items ?? []).length === 1 ? "" : "s"}. Your shopping list now has ${merged.length} item${merged.length === 1 ? "" : "s"}.`
+      );
+    } catch (e: any) {
+      setError(e?.message || "Failed to export shopping list");
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <motion.section
@@ -189,12 +230,21 @@ export default function WeekMenuPage() {
             </p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">
+            <motion.button
+              type="button"
+              onClick={exportToShoppingList}
+              disabled={exporting || loading}
+              className="rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+              whileTap={{ scale: 0.97 }}
+            >
+              {exporting ? "Exporting..." : "Export to shopping list"}
+            </motion.button>
             <motion.a
               href="/shopping-list"
               className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50"
               whileTap={{ scale: 0.97 }}
             >
-              Shopping list
+              Open shopping list
             </motion.a>
             <motion.button
               type="button"
@@ -216,6 +266,7 @@ export default function WeekMenuPage() {
           </div>
         </div>
         {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+        {message && <p className="mt-2 text-sm text-emerald-700">{message}</p>}
         {loading && <p className="mt-2 text-sm text-slate-600">Loading...</p>}
       </motion.section>
 

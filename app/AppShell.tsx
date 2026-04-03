@@ -78,6 +78,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             Shopping list
           </motion.a>
           <motion.a
+            href="/ingredients"
+            className="rounded px-2 py-1 hover:bg-slate-100"
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.96 }}
+          >
+            Ingredients
+          </motion.a>
+          <motion.a
             href="/import"
             className="rounded bg-blue-600 px-3 py-1 text-white shadow-sm hover:bg-blue-700"
             whileHover={{

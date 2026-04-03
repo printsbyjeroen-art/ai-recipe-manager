@@ -1,6 +1,18 @@
-import { supabaseAdmin } from "./supabase";
-import { recipeModel, RECIPE_EXTRACTION_PROMPT } from "./gemini";
 import * as cheerio from "cheerio";
+import { guessStoreSection, normalizeStoreSection } from "./ingredients";
+import { recipeModel, RECIPE_EXTRACTION_PROMPT } from "./gemini";
+import { supabaseAdmin } from "./supabase";
+
+function isMissingIngredientProfileColumnError(error: any) {
+  const message = String(error?.message ?? "").toLowerCase();
+  return (
+    message.includes("store_section") ||
+    message.includes("calories_per_100g") ||
+    message.includes("protein_g_per_100g") ||
+    message.includes("carbs_g_per_100g") ||
+    message.includes("fat_g_per_100g")
+  );
+}
 
 export type ImportQueueStatus = "pending" | "processing" | "failed" | "completed";
 
@@ -139,14 +151,35 @@ ${pageText}`;
     const recipeId = created.id as number;
 
     if (Array.isArray(recipe.ingredients) && recipe.ingredients.length > 0) {
-      await supabaseAdmin.from("ingredients").insert(
+      let { error: ingredientError } = await supabaseAdmin.from("ingredients").insert(
         recipe.ingredients.map((i: any) => ({
           recipe_id: recipeId,
           name: i.name,
           amount: i.amount,
-          unit: i.unit
+          unit: i.unit,
+          store_section: normalizeStoreSection(i.store_section || guessStoreSection(i.name)),
+          calories_per_100g: Math.max(0, Number(i.calories_per_100g) || 0),
+          protein_g_per_100g: Math.max(0, Number(i.protein_g_per_100g) || 0),
+          carbs_g_per_100g: Math.max(0, Number(i.carbs_g_per_100g) || 0),
+          fat_g_per_100g: Math.max(0, Number(i.fat_g_per_100g) || 0)
         }))
       );
+
+      if (ingredientError && isMissingIngredientProfileColumnError(ingredientError)) {
+        const fallback = await supabaseAdmin.from("ingredients").insert(
+          recipe.ingredients.map((i: any) => ({
+            recipe_id: recipeId,
+            name: i.name,
+            amount: i.amount,
+            unit: i.unit
+          }))
+        );
+        ingredientError = fallback.error;
+      }
+
+      if (ingredientError) {
+        throw new Error(ingredientError.message || "Failed to save ingredients");
+      }
     }
 
     if (Array.isArray(recipe.steps) && recipe.steps.length > 0) {

@@ -302,6 +302,21 @@ export default function RecipeDetailClient({ recipe }: Props) {
               />
               <span className="text-[10px] text-slate-600">cook min</span>
             </div>
+            <div className="flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5">
+              <input
+                type="number"
+                className="w-16 rounded-md border border-slate-300 px-1 py-0.5 text-right"
+                min={0}
+                value={draft.calories_per_serving}
+                onChange={(e) =>
+                  setDraft((prev) => ({
+                    ...prev,
+                    calories_per_serving: Math.max(0, Number(e.target.value) || 0)
+                  }))
+                }
+              />
+              <span className="text-[10px] text-slate-600">kcal/serv</span>
+            </div>
           </>
         ) : (
           <>
@@ -314,6 +329,9 @@ export default function RecipeDetailClient({ recipe }: Props) {
             <span className="rounded-full bg-slate-100 px-2 py-0.5">
               {current.prep_time + current.cook_time} min
             </span>
+            <span className="rounded-full bg-amber-50 px-2 py-0.5">
+              {Math.round(current.calories_per_serving || 0)} kcal/serving
+            </span>
           </>
         )}
         {current.source_url && !editing && (
@@ -325,6 +343,72 @@ export default function RecipeDetailClient({ recipe }: Props) {
           >
             Original source
           </a>
+        )}
+      </div>
+      <div className="mt-3 grid gap-2 md:grid-cols-3 text-xs text-slate-700">
+        {editing ? (
+          <>
+            <label className="flex items-center justify-between gap-2 rounded bg-slate-100 px-2 py-1">
+              <span>Protein (g)</span>
+              <input
+                type="number"
+                className="w-20 rounded-md border border-slate-300 px-2 py-1 text-right"
+                min={0}
+                step={0.1}
+                value={draft.protein_g}
+                onChange={(e) =>
+                  setDraft((prev) => ({
+                    ...prev,
+                    protein_g: Math.max(0, Number(e.target.value) || 0)
+                  }))
+                }
+              />
+            </label>
+            <label className="flex items-center justify-between gap-2 rounded bg-slate-100 px-2 py-1">
+              <span>Carbs (g)</span>
+              <input
+                type="number"
+                className="w-20 rounded-md border border-slate-300 px-2 py-1 text-right"
+                min={0}
+                step={0.1}
+                value={draft.carbs_g}
+                onChange={(e) =>
+                  setDraft((prev) => ({
+                    ...prev,
+                    carbs_g: Math.max(0, Number(e.target.value) || 0)
+                  }))
+                }
+              />
+            </label>
+            <label className="flex items-center justify-between gap-2 rounded bg-slate-100 px-2 py-1">
+              <span>Fat (g)</span>
+              <input
+                type="number"
+                className="w-20 rounded-md border border-slate-300 px-2 py-1 text-right"
+                min={0}
+                step={0.1}
+                value={draft.fat_g}
+                onChange={(e) =>
+                  setDraft((prev) => ({
+                    ...prev,
+                    fat_g: Math.max(0, Number(e.target.value) || 0)
+                  }))
+                }
+              />
+            </label>
+          </>
+        ) : (
+          <>
+            <span className="rounded bg-slate-100 px-2 py-1 text-center">
+              Protein: {Number(current.protein_g || 0).toFixed(1)}g
+            </span>
+            <span className="rounded bg-slate-100 px-2 py-1 text-center">
+              Carbs: {Number(current.carbs_g || 0).toFixed(1)}g
+            </span>
+            <span className="rounded bg-slate-100 px-2 py-1 text-center">
+              Fat: {Number(current.fat_g || 0).toFixed(1)}g
+            </span>
+          </>
         )}
       </div>
       {error && (

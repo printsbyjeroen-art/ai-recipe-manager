@@ -1,16 +1,25 @@
 import { NextResponse } from "next/server";
-import { supabaseBrowser } from "../../../lib/supabase";
+import { supabaseAdmin } from "../../../lib/supabase";
 import type { Recipe } from "../../../types/recipe";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
+  const userId = searchParams.get("userId");
   const search = searchParams.get("search");
   const mealType = searchParams.get("meal_type");
   const dishType = searchParams.get("dish_type");
 
-  let query = supabaseBrowser.from("recipes").select("*").order("created_at", {
-    ascending: false
-  });
+  if (!userId) {
+    return NextResponse.json({ error: "Missing userId" }, { status: 400 });
+  }
+
+  let query = supabaseAdmin
+    .from("recipes")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", {
+      ascending: false
+    });
 
   if (search) {
     query = query.or(
@@ -34,20 +43,18 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const body = (await request.json()) as Recipe;
+  const body = (await request.json()) as Recipe & { userId?: string };
 
-  const { ingredients, steps, ...recipeFields } = body;
-
-  const { data: userResult } = await supabaseBrowser.auth.getUser();
-  const user = userResult?.user;
-  if (!user) {
-    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  if (!body.userId) {
+    return NextResponse.json({ error: "Missing userId" }, { status: 400 });
   }
 
-  const { data: recipe, error } = await supabaseBrowser
+  const { ingredients, steps, userId, ...recipeFields } = body;
+
+  const { data: recipe, error } = await supabaseAdmin
     .from("recipes")
     .insert({
-      user_id: user.id,
+      user_id: userId,
       ...recipeFields
     })
     .select("*")
@@ -63,7 +70,7 @@ export async function POST(request: Request) {
   const recipeId = recipe.id;
 
   if (ingredients?.length) {
-    const { error: ingError } = await supabaseBrowser.from("ingredients").insert(
+    const { error: ingError } = await supabaseAdmin.from("ingredients").insert(
       ingredients.map((i) => ({
         recipe_id: recipeId,
         name: i.name,
@@ -80,7 +87,7 @@ export async function POST(request: Request) {
   }
 
   if (steps?.length) {
-    const { error: stepsError } = await supabaseBrowser.from("steps").insert(
+    const { error: stepsError } = await supabaseAdmin.from("steps").insert(
       steps.map((s) => ({
         recipe_id: recipeId,
         step_number: s.step_number,

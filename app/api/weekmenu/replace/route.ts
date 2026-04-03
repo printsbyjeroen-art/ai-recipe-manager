@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabaseBrowser } from "../../../../lib/supabase";
+import { supabaseAdmin } from "../../../../lib/supabase";
 import { getWeekStartISO, WEEKMENU_SLOT } from "../../../../lib/weekmenu";
 
 function pickRandom<T>(arr: T[]) {
@@ -7,7 +7,7 @@ function pickRandom<T>(arr: T[]) {
 }
 
 async function ensureWeekMenu(weekStart: string, userId: string) {
-  const { data: existing } = await supabaseBrowser
+  const { data: existing } = await supabaseAdmin
     .from("week_menus")
     .select("*")
     .eq("week_start_date", weekStart)
@@ -16,7 +16,7 @@ async function ensureWeekMenu(weekStart: string, userId: string) {
 
   if (existing) return existing;
 
-  const { data: created, error } = await supabaseBrowser
+  const { data: created, error } = await supabaseAdmin
     .from("week_menus")
     .insert({ week_start_date: weekStart, user_id: userId })
     .select("*")
@@ -32,32 +32,31 @@ async function ensureWeekMenu(weekStart: string, userId: string) {
       week_menu_id: created.id,
       day_of_week: day,
       meal_slot: WEEKMENU_SLOT,
-      recipe_id: null
+      recipe_id: null,
+      planned_servings: null
     });
   }
-  await supabaseBrowser.from("week_menu_items").insert(items);
+  await supabaseAdmin.from("week_menu_items").insert(items);
 
   return created;
 }
 
 export async function POST(request: Request) {
-  const body = (await request.json()) as { week_start?: string; day_of_week: number };
+  const body = (await request.json()) as { week_start?: string; userId?: string; day_of_week: number };
   const weekStart = body.week_start || getWeekStartISO();
 
   if (body.day_of_week < 0 || body.day_of_week > 6) {
     return NextResponse.json({ error: "Invalid day_of_week" }, { status: 400 });
   }
 
-  const { data: userResult } = await supabaseBrowser.auth.getUser();
-  const user = userResult?.user;
-  if (!user) {
-    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  if (!body.userId) {
+    return NextResponse.json({ error: "Missing userId" }, { status: 400 });
   }
 
   try {
-    const menu = await ensureWeekMenu(weekStart, user.id);
+    const menu = await ensureWeekMenu(weekStart, body.userId);
 
-    const { data: items } = await supabaseBrowser
+    const { data: items } = await supabaseAdmin
       .from("week_menu_items")
       .select("day_of_week, recipe_id")
       .eq("week_menu_id", menu.id)
@@ -73,32 +72,32 @@ export async function POST(request: Request) {
       (items ?? []).find((i: any) => i.day_of_week === body.day_of_week)?.recipe_id ??
       null;
 
-    let { data: candidates } = await supabaseBrowser
+    let { data: candidates } = await supabaseAdmin
       .from("recipes")
-      .select("id")
+      .select("id, servings")
       .eq("meal_type", "dinner")
-      .eq("user_id", user.id)
+      .eq("user_id", body.userId)
       .order("created_at", { ascending: false });
 
     if (!candidates || candidates.length === 0) {
-      const { data: all } = await supabaseBrowser
+      const { data: all } = await supabaseAdmin
         .from("recipes")
-        .select("id")
-        .eq("user_id", user.id)
+        .select("id, servings")
+        .eq("user_id", body.userId)
         .order("created_at", { ascending: false });
       candidates = all ?? [];
     }
 
     const filtered = (candidates ?? [])
-      .map((c: any) => c.id as number)
-      .filter((id) => id !== current && !used.has(id));
+      .map((c: any) => ({ id: c.id as number, servings: Number(c.servings) || 1 }))
+      .filter((candidate) => candidate.id !== current && !used.has(candidate.id));
 
     const next = filtered.length > 0 ? pickRandom(filtered) : null;
     const now = new Date().toISOString();
 
-    const { data: updated, error } = await supabaseBrowser
+    const { data: updated, error } = await supabaseAdmin
       .from("week_menu_items")
-      .update({ recipe_id: next, updated_at: now })
+      .update({ recipe_id: next?.id ?? null, planned_servings: next?.servings ?? null, updated_at: now })
       .eq("week_menu_id", menu.id)
       .eq("day_of_week", body.day_of_week)
       .eq("meal_slot", WEEKMENU_SLOT)

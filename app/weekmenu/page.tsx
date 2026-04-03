@@ -3,10 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { WEEK_DAYS, WEEKMENU_SLOT } from "../../lib/weekmenu";
+import { supabaseBrowser } from "../../lib/supabase";
 
 type RecipeSummary = {
   id: number;
   title: string;
+  servings: number;
 };
 
 type WeekMenuItem = {
@@ -14,6 +16,7 @@ type WeekMenuItem = {
   day_of_week: number;
   meal_slot: typeof WEEKMENU_SLOT;
   recipe_id: number | null;
+  planned_servings: number | null;
   updated_at: string;
 };
 
@@ -38,9 +41,14 @@ export default function WeekMenuPage() {
     setLoading(true);
     setError(null);
     try {
+      const {
+        data: { user }
+      } = await supabaseBrowser.auth.getUser();
+      if (!user) throw new Error("Please sign in first.");
+
       const [menuRes, recipesRes] = await Promise.all([
-        fetch(`/api/weekmenu`),
-        fetch(`/api/recipes?meal_type=dinner`)
+        fetch(`/api/weekmenu?userId=${encodeURIComponent(user.id)}`),
+        fetch(`/api/recipes?meal_type=dinner&userId=${encodeURIComponent(user.id)}`)
       ]);
 
       const menuData = await menuRes.json();
@@ -53,7 +61,7 @@ export default function WeekMenuPage() {
       setWeekStart(menuData.week_start);
       setItems(menuData.items ?? []);
       setRecipes(
-        (recipesData.recipes ?? []).map((r: any) => ({ id: r.id, title: r.title }))
+        (recipesData.recipes ?? []).map((r: any) => ({ id: r.id, title: r.title, servings: r.servings }))
       );
     } catch (e: any) {
       setError(e?.message || "Failed to load");
@@ -66,24 +74,34 @@ export default function WeekMenuPage() {
     load();
   }, []);
 
-  const updateDinner = async (day: number, recipeId: number | null) => {
+  const updateDinner = async (
+    day: number,
+    recipeId: number | null,
+    plannedServings?: number | null
+  ) => {
     const key = `${day}:${WEEKMENU_SLOT}`;
     setSavingKey(key);
     setError(null);
     try {
+      const {
+        data: { user }
+      } = await supabaseBrowser.auth.getUser();
+      if (!user) throw new Error("Please sign in first.");
+
       const res = await fetch("/api/weekmenu", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           week_start: weekStart || undefined,
+          userId: user.id,
           day_of_week: day,
-          recipe_id: recipeId
+          recipe_id: recipeId,
+          planned_servings: recipeId ? plannedServings ?? null : null
         })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to save");
 
-      // Update local state
       setItems((prev) =>
         prev.map((it) =>
           it.day_of_week === day && it.meal_slot === WEEKMENU_SLOT ? data.item : it
@@ -96,14 +114,25 @@ export default function WeekMenuPage() {
     }
   };
 
+  const updatePortions = async (day: number, portions: number) => {
+    const currentItem = itemMap.get(`${day}:${WEEKMENU_SLOT}`);
+    if (!currentItem?.recipe_id) return;
+    await updateDinner(day, currentItem.recipe_id, Math.max(1, portions));
+  };
+
   const generate = async () => {
     setGenerating(true);
     setError(null);
     try {
+      const {
+        data: { user }
+      } = await supabaseBrowser.auth.getUser();
+      if (!user) throw new Error("Please sign in first.");
+
       const res = await fetch("/api/weekmenu/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ week_start: weekStart || undefined })
+        body: JSON.stringify({ week_start: weekStart || undefined, userId: user.id })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to generate");
@@ -120,10 +149,15 @@ export default function WeekMenuPage() {
     setSavingKey(key);
     setError(null);
     try {
+      const {
+        data: { user }
+      } = await supabaseBrowser.auth.getUser();
+      if (!user) throw new Error("Please sign in first.");
+
       const res = await fetch("/api/weekmenu/replace", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ week_start: weekStart || undefined, day_of_week: day })
+        body: JSON.stringify({ week_start: weekStart || undefined, userId: user.id, day_of_week: day })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to replace");
@@ -155,6 +189,13 @@ export default function WeekMenuPage() {
             </p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">
+            <motion.a
+              href="/shopping-list"
+              className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50"
+              whileTap={{ scale: 0.97 }}
+            >
+              Shopping list
+            </motion.a>
             <motion.button
               type="button"
               onClick={generate}
@@ -201,7 +242,7 @@ export default function WeekMenuPage() {
                 </motion.button>
                 <motion.button
                   type="button"
-                  onClick={() => updateDinner(day.idx, null)}
+                  onClick={() => updateDinner(day.idx, null, null)}
                   disabled={savingKey === `${day.idx}:${WEEKMENU_SLOT}`}
                   className="rounded-md border border-red-300 bg-white px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
                   whileTap={{ scale: 0.97 }}
@@ -220,17 +261,17 @@ export default function WeekMenuPage() {
                   {(() => {
                     const it = itemMap.get(`${day.idx}:${WEEKMENU_SLOT}`);
                     const current = it?.recipe_id ?? null;
+                    const currentPortions = it?.planned_servings ?? null;
                     const isSaving = savingKey === `${day.idx}:${WEEKMENU_SLOT}`;
                     return (
                       <>
                         <select
                           value={current ?? ""}
-                          onChange={(e) =>
-                            updateDinner(
-                              day.idx,
-                              e.target.value ? Number(e.target.value) : null
-                            )
-                          }
+                          onChange={(e) => {
+                            const nextId = e.target.value ? Number(e.target.value) : null;
+                            const recipe = recipes.find((r) => r.id === nextId);
+                            updateDinner(day.idx, nextId, recipe?.servings ?? currentPortions ?? 1);
+                          }}
                           className="w-full appearance-none rounded-md border border-slate-300 bg-white px-3 py-2 pr-8 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                         >
                           <option value="">—</option>
@@ -245,6 +286,20 @@ export default function WeekMenuPage() {
                         </div>
                         {isSaving && (
                           <p className="mt-1 text-xs text-slate-500">Saving…</p>
+                        )}
+                        {current && (
+                          <div className="mt-2 flex items-center gap-2">
+                            <label className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+                              Portions
+                            </label>
+                            <input
+                              type="number"
+                              min={1}
+                              value={currentPortions ?? recipes.find((r) => r.id === current)?.servings ?? 1}
+                              onChange={(e) => updatePortions(day.idx, Number(e.target.value) || 1)}
+                              className="w-20 rounded-md border border-slate-300 px-2 py-1 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            />
+                          </div>
                         )}
                       </>
                     );

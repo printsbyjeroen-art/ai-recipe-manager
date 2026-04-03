@@ -6,11 +6,13 @@ export type ImportQueueStatus = "pending" | "processing" | "failed" | "completed
 
 export interface ImportQueueItem {
   id: number;
+  user_id?: string | null;
   url: string;
   status: ImportQueueStatus;
   error: string | null;
   response_text?: string | null;
   recipe_id: number | null;
+  process_after?: string | null;
   created_at: string;
   updated_at: string;
   last_attempt_at: string | null;
@@ -44,6 +46,11 @@ function isPermanentPageError(message: string): boolean {
   return /failed to fetch page:\s*4\d\d/i.test(message);
 }
 
+function num(value: any, fallback = 0): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
 async function fetchPageText(url: string): Promise<string> {
   const res = await fetch(url, {
     headers: {
@@ -64,7 +71,8 @@ async function fetchPageText(url: string): Promise<string> {
 }
 
 export async function processQueueItem(
-  item: ImportQueueItem
+  item: ImportQueueItem,
+  ownerUserId?: string
 ): Promise<{ ok: boolean; recipeId?: number; error?: string; rawResponse?: string }> {
   const now = new Date().toISOString();
 
@@ -77,6 +85,11 @@ export async function processQueueItem(
   let raw: string | undefined;
 
   try {
+    const recipeOwnerId = item.user_id ?? ownerUserId;
+    if (!recipeOwnerId) {
+      throw new Error("Queue item is missing user_id. Remove and re-import this URL.");
+    }
+
     const pageText = await fetchPageText(item.url);
 
     const prompt = `${RECIPE_EXTRACTION_PROMPT}
@@ -102,13 +115,18 @@ ${pageText}`;
     const { data: created, error: dbError } = await supabaseAdmin
       .from("recipes")
       .insert({
+        user_id: recipeOwnerId,
         title: recipe.title,
         description: recipe.description,
-        servings: recipe.servings,
+        servings: num(recipe.servings, 1),
+        calories_per_serving: num(recipe.calories_per_serving),
+        protein_g: num(recipe.protein_g),
+        carbs_g: num(recipe.carbs_g),
+        fat_g: num(recipe.fat_g),
         meal_type: recipe.meal_type,
         dish_type: recipe.dish_type,
-        prep_time: recipe.prep_time,
-        cook_time: recipe.cook_time,
+        prep_time: num(recipe.prep_time),
+        cook_time: num(recipe.cook_time),
         source_url: recipe.source_url
       })
       .select("*")
@@ -173,14 +191,28 @@ ${pageText}`;
 
 export async function retryDueImports(maxAgeMinutes = 5) {
   const cutoff = new Date(Date.now() - maxAgeMinutes * 60 * 1000).toISOString();
+  const nowIso = new Date().toISOString();
 
-  const { data, error } = await supabaseAdmin
+  // Only pick up items that are past their process_after delay (if any).
+  let { data, error } = await supabaseAdmin
     .from("import_queue")
     .select("*")
     .in("status", ["pending", "failed"])
     .or(`last_attempt_at.is.null,last_attempt_at.lt.${cutoff}`)
+    .or(`process_after.is.null,process_after.lte.${nowIso}`)
     .order("created_at", { ascending: true })
     .limit(10);
+
+  // If process_after column doesn't exist yet, fall back to the old query.
+  if (error && String(error.message ?? "").toLowerCase().includes("process_after")) {
+    ({ data, error } = await supabaseAdmin
+      .from("import_queue")
+      .select("*")
+      .in("status", ["pending", "failed"])
+      .or(`last_attempt_at.is.null,last_attempt_at.lt.${cutoff}`)
+      .order("created_at", { ascending: true })
+      .limit(10));
+  }
 
   if (error || !data || data.length === 0) {
     return { processed: 0 };

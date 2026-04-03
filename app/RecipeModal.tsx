@@ -17,6 +17,10 @@ export default function RecipeModal({ recipe, onClose, onSave }: RecipeModalProp
     title: "",
     description: "",
     servings: 1,
+    calories_per_serving: 0,
+    protein_g: 0,
+    carbs_g: 0,
+    fat_g: 0,
     meal_type: "dinner",
     dish_type: "other",
     prep_time: 0,
@@ -34,6 +38,10 @@ export default function RecipeModal({ recipe, onClose, onSave }: RecipeModalProp
         title: "",
         description: "",
         servings: 1,
+        calories_per_serving: 0,
+        protein_g: 0,
+        carbs_g: 0,
+        fat_g: 0,
         meal_type: "dinner",
         dish_type: "other",
         prep_time: 0,
@@ -172,6 +180,54 @@ export default function RecipeModal({ recipe, onClose, onSave }: RecipeModalProp
                 value={form.prep_time}
                 onChange={(e) => updateForm("prep_time", Number(e.target.value))}
                 min="0"
+                className="w-full rounded-md border border-slate-300 px-3 py-2"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="mb-1 block text-sm font-medium">Calories per serving</label>
+              <input
+                type="number"
+                value={form.calories_per_serving}
+                onChange={(e) => updateForm("calories_per_serving", Number(e.target.value))}
+                min="0"
+                step="1"
+                className="w-full rounded-md border border-slate-300 px-3 py-2"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium">Protein (g)</label>
+              <input
+                type="number"
+                value={form.protein_g}
+                onChange={(e) => updateForm("protein_g", Number(e.target.value))}
+                min="0"
+                step="0.1"
+                className="w-full rounded-md border border-slate-300 px-3 py-2"
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="mb-1 block text-sm font-medium">Carbs (g)</label>
+              <input
+                type="number"
+                value={form.carbs_g}
+                onChange={(e) => updateForm("carbs_g", Number(e.target.value))}
+                min="0"
+                step="0.1"
+                className="w-full rounded-md border border-slate-300 px-3 py-2"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium">Fat (g)</label>
+              <input
+                type="number"
+                value={form.fat_g}
+                onChange={(e) => updateForm("fat_g", Number(e.target.value))}
+                min="0"
+                step="0.1"
                 className="w-full rounded-md border border-slate-300 px-3 py-2"
               />
             </div>

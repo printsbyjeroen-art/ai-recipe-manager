@@ -30,6 +30,10 @@ export interface Recipe {
   title: string;
   description: string;
   servings: number;
+  calories_per_serving: number;
+  protein_g: number;
+  carbs_g: number;
+  fat_g: number;
   meal_type: MealType;
   dish_type: DishType;
   prep_time: number;

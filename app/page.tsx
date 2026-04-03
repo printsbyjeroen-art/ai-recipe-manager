@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { MealType, DishType, Recipe } from "../types/recipe";
 import RecipeModal from "./RecipeModal";
+import { supabaseBrowser } from "../lib/supabase";
 
 interface RecipeSummary extends Omit<Recipe, "ingredients" | "steps"> {}
 
@@ -37,12 +38,27 @@ export default function DashboardPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editingRecipe, setEditingRecipe] = useState<Recipe | null>(null);
 
+  const getUserId = async () => {
+    const {
+      data: { user }
+    } = await supabaseBrowser.auth.getUser();
+    return user?.id ?? null;
+  };
+
   const fetchRecipes = async () => {
     setLoading(true);
     const params = new URLSearchParams();
     if (search) params.set("search", search);
     if (mealType !== "all") params.set("meal_type", mealType);
     if (dishType !== "all") params.set("dish_type", dishType);
+
+    const userId = await getUserId();
+    if (!userId) {
+      setRecipes([]);
+      setLoading(false);
+      return;
+    }
+    params.set("userId", userId);
 
     const res = await fetch(`/api/recipes?${params.toString()}`);
     const data = await res.json();
@@ -76,12 +92,15 @@ export default function DashboardPage() {
   };
 
   const handleSaveRecipe = async (recipe: Recipe) => {
+    const userId = await getUserId();
+    if (!userId) return;
+
     const method = editingRecipe ? "PUT" : "POST";
     const url = editingRecipe ? `/api/recipes/${editingRecipe.id}` : "/api/recipes";
     await fetch(url, {
       method,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(recipe)
+      body: JSON.stringify({ ...recipe, userId })
     });
     setModalOpen(false);
     fetchRecipes();
@@ -210,6 +229,20 @@ export default function DashboardPage() {
                         </span>
                         <span className="rounded-full bg-slate-100 px-2 py-0.5">
                           {recipe.prep_time + recipe.cook_time} min
+                        </span>
+                        <span className="rounded-full bg-amber-50 px-2 py-0.5">
+                          {Math.round(recipe.calories_per_serving || 0)} kcal/serving
+                        </span>
+                      </div>
+                      <div className="mb-3 grid grid-cols-3 gap-1 text-[11px] text-slate-600">
+                        <span className="rounded bg-slate-100 px-2 py-1 text-center">
+                          P {Number(recipe.protein_g || 0).toFixed(1)}g
+                        </span>
+                        <span className="rounded bg-slate-100 px-2 py-1 text-center">
+                          C {Number(recipe.carbs_g || 0).toFixed(1)}g
+                        </span>
+                        <span className="rounded bg-slate-100 px-2 py-1 text-center">
+                          F {Number(recipe.fat_g || 0).toFixed(1)}g
                         </span>
                       </div>
                       <div className="mt-auto flex gap-2 text-sm">

@@ -34,7 +34,8 @@ Given the raw text content of a webpage that likely contains a recipe, extract a
     {
       "name": string,
       "amount": number,
-      "unit": string
+      "unit": string,
+      "store_section": "produce" | "bakery" | "dairy" | "meat" | "fish" | "frozen" | "pantry" | "spices" | "drinks" | "snacks" | "household" | "miscellaneous"
     }
   ],
   "steps": [
@@ -53,6 +54,7 @@ Rules:
 - Estimate calories_per_serving and macros (protein_g, carbs_g, fat_g) based on the ingredient list and amounts.
 - Nutrition values must be per serving, in grams for macros.
 - Use realistic rounded numbers (e.g. 27.5 for grams, 540 for kcal).
+- For every ingredient, include a sensible grocery store section in "store_section". Use "miscellaneous" if unsure.
 - Keep ingredient names concise, e.g. "olive oil" instead of "extra virgin olive oil, plus more for serving".
 - Keep step instructions clear and sequential.
 - Use numbers (minutes) for prep_time and cook_time. If not specified, make a reasonable estimate.

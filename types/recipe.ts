@@ -16,6 +16,11 @@ export interface Ingredient {
   name: string;
   amount: number;
   unit: string;
+  store_section?: string;
+  calories_per_100g?: number;
+  protein_g_per_100g?: number;
+  carbs_g_per_100g?: number;
+  fat_g_per_100g?: number;
 }
 
 export interface Step {

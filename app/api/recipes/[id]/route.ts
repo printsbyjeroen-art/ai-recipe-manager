@@ -1,6 +1,52 @@
 import { NextResponse } from "next/server";
+import { guessStoreSection, normalizeStoreSection } from "../../../../lib/ingredients";
 import { supabaseAdmin } from "../../../../lib/supabase";
 import type { Ingredient, Recipe, Step } from "../../../../types/recipe";
+
+function isMissingIngredientProfileColumnError(error: any) {
+  const message = String(error?.message ?? "").toLowerCase();
+  return (
+    message.includes("store_section") ||
+    message.includes("calories_per_100g") ||
+    message.includes("protein_g_per_100g") ||
+    message.includes("carbs_g_per_100g") ||
+    message.includes("fat_g_per_100g")
+  );
+}
+
+async function insertRecipeIngredients(recipeId: number, ingredients: Ingredient[] = []) {
+  if (!ingredients.length) {
+    return null;
+  }
+
+  let { error } = await supabaseAdmin.from("ingredients").insert(
+    ingredients.map((i) => ({
+      recipe_id: recipeId,
+      name: i.name,
+      amount: i.amount,
+      unit: i.unit,
+      store_section: normalizeStoreSection(i.store_section || guessStoreSection(i.name)),
+      calories_per_100g: Math.max(0, Number(i.calories_per_100g) || 0),
+      protein_g_per_100g: Math.max(0, Number(i.protein_g_per_100g) || 0),
+      carbs_g_per_100g: Math.max(0, Number(i.carbs_g_per_100g) || 0),
+      fat_g_per_100g: Math.max(0, Number(i.fat_g_per_100g) || 0)
+    }))
+  );
+
+  if (error && isMissingIngredientProfileColumnError(error)) {
+    const fallback = await supabaseAdmin.from("ingredients").insert(
+      ingredients.map((i) => ({
+        recipe_id: recipeId,
+        name: i.name,
+        amount: i.amount,
+        unit: i.unit
+      }))
+    );
+    error = fallback.error;
+  }
+
+  return error;
+}
 
 async function getFullRecipe(id: number): Promise<Recipe | null> {
   const { data: recipe, error } = await supabaseAdmin
@@ -75,14 +121,7 @@ export async function PUT(
   await supabaseAdmin.from("steps").delete().eq("recipe_id", id);
 
   if (ingredients?.length) {
-    const { error: ingError } = await supabaseAdmin.from("ingredients").insert(
-      ingredients.map((i) => ({
-        recipe_id: id,
-        name: i.name,
-        amount: i.amount,
-        unit: i.unit
-      }))
-    );
+    const ingError = await insertRecipeIngredients(id, ingredients);
     if (ingError) {
       return NextResponse.json(
         { error: ingError.message },

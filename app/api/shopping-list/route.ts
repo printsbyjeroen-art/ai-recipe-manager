@@ -1,4 +1,10 @@
 import { NextResponse } from "next/server";
+import {
+  guessStoreSection,
+  normalizeIngredientName,
+  normalizeStoreSection,
+  normalizeUnit
+} from "../../../lib/ingredients";
 import { supabaseAdmin } from "../../../lib/supabase";
 import { getWeekStartISO, WEEKMENU_SLOT } from "../../../lib/weekmenu";
 
@@ -7,6 +13,7 @@ type IngredientRow = {
   name: string;
   amount: number;
   unit: string;
+  store_section?: string | null;
 };
 
 type MenuItemRow = {
@@ -31,120 +38,18 @@ type ShoppingListItem = {
   name: string;
   amount: number;
   unit: string;
+  store_section: string;
   recipeCount: number;
   recipes: ShoppingListRecipeRef[];
 };
 
-type NormalizedUnit = {
-  unit: string;
-  multiplier: number;
-};
-
-const UNIT_ALIASES: Record<string, NormalizedUnit> = {
-  g: { unit: "g", multiplier: 1 },
-  gr: { unit: "g", multiplier: 1 },
-  gram: { unit: "g", multiplier: 1 },
-  grams: { unit: "g", multiplier: 1 },
-  kg: { unit: "g", multiplier: 1000 },
-  kilo: { unit: "g", multiplier: 1000 },
-  kilogram: { unit: "g", multiplier: 1000 },
-  kilograms: { unit: "g", multiplier: 1000 },
-  ml: { unit: "ml", multiplier: 1 },
-  milliliter: { unit: "ml", multiplier: 1 },
-  milliliters: { unit: "ml", multiplier: 1 },
-  l: { unit: "ml", multiplier: 1000 },
-  liter: { unit: "ml", multiplier: 1000 },
-  liters: { unit: "ml", multiplier: 1000 },
-  el: { unit: "el", multiplier: 1 },
-  eetlepel: { unit: "el", multiplier: 1 },
-  eetlepels: { unit: "el", multiplier: 1 },
-  tablespoon: { unit: "el", multiplier: 1 },
-  tablespoons: { unit: "el", multiplier: 1 },
-  tbsp: { unit: "el", multiplier: 1 },
-  tl: { unit: "tl", multiplier: 1 },
-  theelepel: { unit: "tl", multiplier: 1 },
-  theelepels: { unit: "tl", multiplier: 1 },
-  teaspoon: { unit: "tl", multiplier: 1 },
-  teaspoons: { unit: "tl", multiplier: 1 },
-  tsp: { unit: "tl", multiplier: 1 },
-  stuk: { unit: "st", multiplier: 1 },
-  stuks: { unit: "st", multiplier: 1 },
-  piece: { unit: "st", multiplier: 1 },
-  pieces: { unit: "st", multiplier: 1 },
-  teen: { unit: "teen", multiplier: 1 },
-  tenen: { unit: "teen", multiplier: 1 },
-  clove: { unit: "teen", multiplier: 1 },
-  cloves: { unit: "teen", multiplier: 1 },
-  blik: { unit: "blik", multiplier: 1 },
-  blikken: { unit: "blik", multiplier: 1 },
-  can: { unit: "blik", multiplier: 1 },
-  cans: { unit: "blik", multiplier: 1 },
-  bos: { unit: "bos", multiplier: 1 },
-  bossen: { unit: "bos", multiplier: 1 },
-  bunch: { unit: "bos", multiplier: 1 },
-  bunches: { unit: "bos", multiplier: 1 },
-  snuf: { unit: "snuf", multiplier: 1 },
-  snufje: { unit: "snuf", multiplier: 1 },
-  pinch: { unit: "snuf", multiplier: 1 },
-  pinches: { unit: "snuf", multiplier: 1 }
-};
-
-const INGREDIENT_TOKEN_ALIASES: Record<string, string> = {
-  tomatoes: "tomato",
-  tomaatjes: "tomaat",
-  uien: "ui",
-  eieren: "ei",
-  paprikas: "paprika",
-  wortels: "wortel",
-  citroenen: "citroen",
-  limoenen: "limoen",
-  teentjes: "teen",
-  cloves: "clove",
-  onions: "onion"
-};
-
-function normalizeText(value: string) {
-  return value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/\([^)]*\)/g, " ")
-    .replace(/[,/]+/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+function isMissingStoreSectionColumnError(error: any) {
+  const message = String(error?.message ?? "").toLowerCase();
+  return message.includes("store_section") && message.includes("does not exist");
 }
 
-function singularizeToken(token: string) {
-  if (INGREDIENT_TOKEN_ALIASES[token]) {
-    return INGREDIENT_TOKEN_ALIASES[token];
-  }
-
-  if (token.length > 4 && token.endsWith("en")) {
-    return token.slice(0, -2);
-  }
-
-  if (token.length > 4 && token.endsWith("s") && !token.endsWith("is") && !token.endsWith("us")) {
-    return token.slice(0, -1);
-  }
-
-  return token;
-}
-
-function normalizeIngredientName(name: string) {
-  return normalizeText(name)
-    .split(" ")
-    .filter(Boolean)
-    .map(singularizeToken)
-    .join(" ");
-}
-
-function normalizeUnit(unit: string): NormalizedUnit {
-  const normalized = normalizeText(unit);
-  return UNIT_ALIASES[normalized] ?? { unit: normalized, multiplier: 1 };
-}
-
-function buildKey(name: string, unit: string) {
-  return `${name}::${unit}`;
+function buildKey(name: string, unit: string, storeSection: string) {
+  return `${name}::${unit}::${normalizeStoreSection(storeSection)}`;
 }
 
 export async function GET(request: Request) {
@@ -193,11 +98,24 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: recipesError.message }, { status: 500 });
   }
 
-  const { data: ingredients, error: ingredientsError } = await supabaseAdmin
+  const primaryIngredients = await supabaseAdmin
     .from("ingredients")
-    .select("recipe_id, name, amount, unit")
+    .select("recipe_id, name, amount, unit, store_section")
     .in("recipe_id", recipeIds)
     .order("name", { ascending: true });
+
+  let ingredients = primaryIngredients.data as IngredientRow[] | null;
+  let ingredientsError = primaryIngredients.error;
+
+  if (ingredientsError && isMissingStoreSectionColumnError(ingredientsError)) {
+    const fallback = await supabaseAdmin
+      .from("ingredients")
+      .select("recipe_id, name, amount, unit")
+      .in("recipe_id", recipeIds)
+      .order("name", { ascending: true });
+    ingredients = fallback.data as IngredientRow[] | null;
+    ingredientsError = fallback.error;
+  }
 
   if (ingredientsError) {
     return NextResponse.json({ error: ingredientsError.message }, { status: 500 });
@@ -224,9 +142,11 @@ export async function GET(request: Request) {
     const portionScale = targetServings / sourceServings;
     const normalizedName = normalizeIngredientName(ingredient.name);
     const normalizedUnit = normalizeUnit(ingredient.unit);
-    const key = buildKey(normalizedName, normalizedUnit.unit);
+    const storeSection = normalizeStoreSection(ingredient.store_section || guessStoreSection(ingredient.name));
+    const key = buildKey(normalizedName, normalizedUnit.unit, storeSection);
     const normalizedAmount = (Number(ingredient.amount) || 0) * normalizedUnit.multiplier * portionScale;
     const existing = grouped.get(key);
+
     if (existing) {
       existing.amount += normalizedAmount;
       existing.recipeIds.add(ingredient.recipe_id);
@@ -243,6 +163,7 @@ export async function GET(request: Request) {
         name: normalizedName,
         amount: normalizedAmount,
         unit: normalizedUnit.unit,
+        store_section: storeSection,
         recipeCount: 1,
         recipes: recipe
           ? [
@@ -265,7 +186,11 @@ export async function GET(request: Request) {
       recipeCount: recipeIds.size,
       recipes: item.recipes.sort((a, b) => a.title.localeCompare(b.title))
     }))
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .sort((a, b) => {
+      const sectionDiff = a.store_section.localeCompare(b.store_section);
+      if (sectionDiff !== 0) return sectionDiff;
+      return a.name.localeCompare(b.name);
+    });
 
   return NextResponse.json({ week_start: weekStart, items });
 }

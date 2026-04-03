@@ -21,7 +21,12 @@ create table if not exists public.ingredients (
   recipe_id bigint not null references public.recipes (id) on delete cascade,
   name text not null,
   amount numeric not null,
-  unit text not null
+  unit text not null,
+  store_section text not null default 'miscellaneous',
+  calories_per_100g numeric not null default 0,
+  protein_g_per_100g numeric not null default 0,
+  carbs_g_per_100g numeric not null default 0,
+  fat_g_per_100g numeric not null default 0
 );
 
 create table if not exists public.steps (
@@ -40,6 +45,13 @@ alter table public.recipes
   add column if not exists protein_g numeric not null default 0,
   add column if not exists carbs_g numeric not null default 0,
   add column if not exists fat_g numeric not null default 0;
+
+alter table public.ingredients
+  add column if not exists store_section text not null default 'miscellaneous',
+  add column if not exists calories_per_100g numeric not null default 0,
+  add column if not exists protein_g_per_100g numeric not null default 0,
+  add column if not exists carbs_g_per_100g numeric not null default 0,
+  add column if not exists fat_g_per_100g numeric not null default 0;
 
 create table if not exists public.import_queue (
   id bigint generated always as identity primary key,

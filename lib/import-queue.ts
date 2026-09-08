@@ -9,7 +9,7 @@ import {
 import {
   normalizeRecipeToDutch,
   parseGeminiJsonResponse,
-  getRecipeModel,
+  generateGeminiContent,
   RECIPE_EXTRACTION_PROMPT
 } from "./gemini";
 
@@ -48,6 +48,8 @@ function num(value: any, fallback = 0): number {
 }
 
 async function fetchPageText(url: string): Promise<string> {
+  const startedAt = Date.now();
+  console.info("[import] page fetch started", { url });
   const res = await fetch(url, {
     headers: {
       "User-Agent":
@@ -55,6 +57,11 @@ async function fetchPageText(url: string): Promise<string> {
     }
   });
   if (!res.ok) {
+    console.error("[import] page fetch failed", {
+      url,
+      status: res.status,
+      durationMs: Date.now() - startedAt
+    });
     throw new Error(`Failed to fetch page: ${res.status}`);
   }
   const html = await res.text();
@@ -63,6 +70,11 @@ async function fetchPageText(url: string): Promise<string> {
   $("script, style, noscript").remove();
 
   const text = $("body").text();
+  console.info("[import] page fetch completed", {
+    url,
+    durationMs: Date.now() - startedAt,
+    textLength: text.length
+  });
   return text.replace(/\s+/g, " ").trim();
 }
 
@@ -71,6 +83,12 @@ export async function processQueueItem(
   ownerUserId?: string
 ): Promise<{ ok: boolean; recipeId?: string; error?: string; rawResponse?: string }> {
   const now = new Date().toISOString();
+
+  console.info("[import] queue attempt started", {
+    queueId: item.id,
+    url: item.url,
+    attemptStartedAt: now
+  });
 
   await updateImportQueueItem(item.id, {
     status: "processing",
@@ -96,7 +114,7 @@ Webpage URL: ${item.url}
 Webpage content:
 ${pageText}`;
 
-    const result = await getRecipeModel().generateContent(prompt);
+    const result = await generateGeminiContent(prompt, "extract");
     raw = result.response.text();
 
     let recipe = parseGeminiJsonResponse<any>(raw);
@@ -146,6 +164,20 @@ ${pageText}`;
   } catch (err: any) {
     const message = err?.message || "Unknown error during import";
     const transient = isTransientError(err) && !isPermanentPageError(message);
+
+    console.error("[import] queue attempt failed", {
+      queueId: item.id,
+      url: item.url,
+      transient,
+      error: {
+        name: err?.name,
+        message,
+        status: err?.status,
+        statusText: err?.statusText,
+        cause: err?.cause instanceof Error ? err.cause.message : err?.cause,
+        stack: err?.stack
+      }
+    });
 
     await updateImportQueueItem(item.id, {
       status: transient ? "pending" : "failed",

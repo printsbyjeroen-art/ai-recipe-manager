@@ -1,6 +1,55 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import type { Recipe } from "../types/recipe";
 
+function describeGeminiError(error: unknown) {
+  const err = error as {
+    message?: string;
+    name?: string;
+    status?: number;
+    statusText?: string;
+    cause?: unknown;
+    stack?: string;
+  };
+
+  return {
+    name: err?.name,
+    message: err?.message,
+    status: err?.status,
+    statusText: err?.statusText,
+    cause: err?.cause instanceof Error ? err.cause.message : err?.cause,
+    stack: err?.stack
+  };
+}
+
+export async function generateGeminiContent(
+  prompt: string,
+  stage: "extract" | "normalize"
+) {
+  const startedAt = Date.now();
+  console.info("[gemini] request started", {
+    stage,
+    model: "gemini-flash-latest",
+    promptLength: prompt.length
+  });
+
+  try {
+    const result = await getRecipeModel().generateContent(prompt);
+    console.info("[gemini] request completed", {
+      stage,
+      durationMs: Date.now() - startedAt,
+      responseLength: result.response.text().length
+    });
+    return result;
+  } catch (error) {
+    console.error("[gemini] request failed", {
+      stage,
+      durationMs: Date.now() - startedAt,
+      error: describeGeminiError(error)
+    });
+    throw error;
+  }
+}
+
 export function getRecipeModel() {
   const apiKey = process.env.GOOGLE_API_KEY;
   if (!apiKey) {
@@ -129,7 +178,7 @@ Recipe JSON:
 ${JSON.stringify(recipe)}
 `;
 
-  const result = await getRecipeModel().generateContent(prompt);
+  const result = await generateGeminiContent(prompt, "normalize");
   const parsed = parseGeminiJsonResponse<any>(result.response.text());
 
   return {

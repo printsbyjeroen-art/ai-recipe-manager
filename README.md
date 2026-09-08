@@ -8,7 +8,7 @@ Personal recipe database with AI-powered recipe extraction and categorization.
 - **Backend**: Next.js API routes (Node.js)
 - **Auth & database**: Firebase Auth + Cloud Firestore
 - **Hosting**: Firebase App Hosting
-- **AI**: Google Gemini API for recipe extraction
+- **AI**: Google Gemini API for recipe extraction dsafa
 - **Scraping**: Cheerio for HTML parsing
 
 ### Environment variables

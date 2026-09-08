@@ -1,7 +1,8 @@
 import { onAuthStateChanged, type User } from "firebase/auth";
-import { auth } from "./firebase-client";
+import { getClientAuth } from "./firebase-client";
 
 export function getCurrentUser(): Promise<User | null> {
+  const auth = getClientAuth();
   if (auth.currentUser) {
     return Promise.resolve(auth.currentUser);
   }

@@ -77,7 +77,7 @@ export default function WeekMenuPage() {
 
   const updateDinner = async (
     day: number,
-    recipeId: number | null,
+    recipeId: string | null,
     plannedServings?: number | null
   ) => {
     const key = `${day}:${WEEKMENU_SLOT}`;
@@ -309,7 +309,7 @@ export default function WeekMenuPage() {
                         <select
                           value={current ?? ""}
                           onChange={(e) => {
-                            const nextId = e.target.value ? Number(e.target.value) : null;
+                            const nextId = e.target.value || null;
                             const recipe = recipes.find((r) => r.id === nextId);
                             updateDinner(day.idx, nextId, recipe?.servings ?? currentPortions ?? 1);
                           }}

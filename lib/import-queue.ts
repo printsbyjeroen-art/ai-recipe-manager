@@ -9,7 +9,7 @@ import {
 import {
   normalizeRecipeToDutch,
   parseGeminiJsonResponse,
-  recipeModel,
+  getRecipeModel,
   RECIPE_EXTRACTION_PROMPT
 } from "./gemini";
 
@@ -96,7 +96,7 @@ Webpage URL: ${item.url}
 Webpage content:
 ${pageText}`;
 
-    const result = await recipeModel.generateContent(prompt);
+    const result = await getRecipeModel().generateContent(prompt);
     raw = result.response.text();
 
     let recipe = parseGeminiJsonResponse<any>(raw);

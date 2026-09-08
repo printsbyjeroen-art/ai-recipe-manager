@@ -6,7 +6,7 @@ import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword
 } from "firebase/auth";
-import { auth } from "../../lib/firebase-client";
+import { getClientAuth } from "../../lib/firebase-client";
 
 export default function AuthPage() {
   const [mode, setMode] = useState<"signin" | "signup">("signin");
@@ -22,9 +22,9 @@ export default function AuthPage() {
 
     try {
       if (mode === "signup") {
-        await createUserWithEmailAndPassword(auth, email, password);
+        await createUserWithEmailAndPassword(getClientAuth(), email, password);
       } else {
-        await signInWithEmailAndPassword(auth, email, password);
+        await signInWithEmailAndPassword(getClientAuth(), email, password);
       }
 
       window.location.href = "/";

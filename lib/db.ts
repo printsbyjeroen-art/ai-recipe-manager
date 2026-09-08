@@ -1,5 +1,5 @@
 import type { Ingredient, Recipe, Step } from "../types/recipe";
-import { adminDb } from "./firebase-admin";
+import { getAdminDb } from "./firebase-admin";
 import { getWeekStartISO, WEEKMENU_SLOT } from "./weekmenu";
 
 export type ImportQueueStatus = "pending" | "processing" | "failed" | "completed";
@@ -18,9 +18,9 @@ export interface ImportQueueItem {
   last_attempt_at: string | null;
 }
 
-const recipesCol = () => adminDb.collection("recipes");
-const importQueueCol = () => adminDb.collection("importQueue");
-const weekMenusCol = () => adminDb.collection("weekMenus");
+const recipesCol = () => getAdminDb().collection("recipes");
+const importQueueCol = () => getAdminDb().collection("importQueue");
+const weekMenusCol = () => getAdminDb().collection("weekMenus");
 
 function weekMenuDocId(userId: string, weekStart: string) {
   return `${userId}_${weekStart}`;
@@ -298,7 +298,12 @@ export async function ensureWeekMenu(userId: string, weekStart = getWeekStartISO
   const existing = await ref.get();
 
   if (existing.exists) {
-    return { id: docId, week_start_date: weekStart, ...existing.data()! };
+    return {
+      id: docId,
+      week_start_date: weekStart,
+      items: (existing.data()?.items ?? []) as WeekMenuItemRecord[],
+      ...existing.data()!
+    };
   }
 
   const now = new Date().toISOString();
@@ -419,7 +424,7 @@ export async function updateIngredientProfileForUser(
   matchesName: (name: string) => boolean
 ) {
   const snap = await recipesCol().where("userId", "==", userId).get();
-  const batch = adminDb.batch();
+  const batch = getAdminDb().batch();
   let changed = 0;
 
   for (const doc of snap.docs) {

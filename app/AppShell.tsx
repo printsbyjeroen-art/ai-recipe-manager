@@ -3,14 +3,14 @@
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
 import { onAuthStateChanged, signOut } from "firebase/auth";
-import { auth } from "../lib/firebase-client";
+import { getClientAuth } from "../lib/firebase-client";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const [loadingUser, setLoadingUser] = useState(true);
   const [user, setUser] = useState<any | null>(null);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (nextUser) => {
+    const unsubscribe = onAuthStateChanged(getClientAuth(), (nextUser) => {
       setUser(nextUser);
       setLoadingUser(false);
     });
@@ -88,7 +88,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           {user ? (
             <button
               onClick={async () => {
-                await signOut(auth);
+                await signOut(getClientAuth());
                 window.location.href = "/auth";
               }}
               className="text-xs text-slate-600 hover:underline"

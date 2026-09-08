@@ -42,7 +42,7 @@ export function buildShoppingListItemKey(name: string, unit: string, storeSectio
 
 export function buildShoppingListItemsFromRecipe(
   recipe: {
-    id?: number;
+    id?: string;
     title: string;
     servings: number;
     ingredients?: Array<{
@@ -119,7 +119,7 @@ export function mergeShoppingListItems(
       continue;
     }
 
-    const recipeMap = new Map<number, ShoppingListRecipeRef>();
+    const recipeMap = new Map<string, ShoppingListRecipeRef>();
     for (const recipe of current.recipes ?? []) {
       recipeMap.set(recipe.id, recipe);
     }

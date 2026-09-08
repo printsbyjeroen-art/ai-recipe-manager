@@ -1,18 +1,16 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import type { Recipe } from "../types/recipe";
 
-const apiKey = process.env.GOOGLE_API_KEY;
+export function getRecipeModel() {
+  const apiKey = process.env.GOOGLE_API_KEY;
+  if (!apiKey) {
+    throw new Error("Missing GOOGLE_API_KEY");
+  }
 
-if (!apiKey) {
-  throw new Error("Missing GOOGLE_API_KEY");
+  return new GoogleGenerativeAI(apiKey).getGenerativeModel({
+    model: "gemini-flash-latest"
+  });
 }
-
-const genAI = new GoogleGenerativeAI(apiKey);
-
-export const recipeModel = genAI.getGenerativeModel({
-  // Use the latest Flash model alias supported by the public Gemini API.
-  model: "gemini-flash-latest"
-});
 
 export const RECIPE_EXTRACTION_PROMPT = `
 You are an assistant that extracts structured recipe data from arbitrary webpages.
@@ -131,7 +129,7 @@ Recipe JSON:
 ${JSON.stringify(recipe)}
 `;
 
-  const result = await recipeModel.generateContent(prompt);
+  const result = await getRecipeModel().generateContent(prompt);
   const parsed = parseGeminiJsonResponse<any>(result.response.text());
 
   return {

@@ -36,4 +36,5 @@ env:
   - variable: GOOGLE_API_KEY
     secret: GOOGLE_API_KEY
     availability:
+      - BUILD
       - RUNTIME

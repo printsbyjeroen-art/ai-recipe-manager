@@ -2,6 +2,8 @@ import { notFound } from "next/navigation";
 import { getRecipeById } from "../../../lib/db";
 import RecipeDetailClient from "./recipe-detail-client";
 
+export const dynamic = "force-dynamic";
+
 export default async function RecipePage({
   params
 }: {

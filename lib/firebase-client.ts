@@ -1,18 +1,26 @@
-import { getApp, getApps, initializeApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
+import { getApp, getApps, initializeApp, type FirebaseApp } from "firebase/app";
+import { getAuth, type Auth } from "firebase/auth";
 
-const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID
-};
+function getFirebaseApp(): FirebaseApp {
+  if (getApps().length) {
+    return getApp();
+  }
 
-function getFirebaseApp() {
-  if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
+  const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
+  const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+
+  if (!apiKey || !projectId) {
     throw new Error("Missing Firebase client configuration");
   }
-  return getApps().length ? getApp() : initializeApp(firebaseConfig);
+
+  return initializeApp({
+    apiKey,
+    authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+    projectId,
+    appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID
+  });
 }
 
-export const auth = getAuth(getFirebaseApp());
+export function getClientAuth(): Auth {
+  return getAuth(getFirebaseApp());
+}

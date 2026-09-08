@@ -3,7 +3,7 @@
 Personal recipe database with AI-powered recipe extraction and categorization.
 
 ### Tech stack
-
+dfd
 - **Frontend**: Next.js (App Router) + React + TailwindCSS
 - **Backend**: Next.js API routes (Node.js)
 - **Auth & database**: Firebase Auth + Cloud Firestore

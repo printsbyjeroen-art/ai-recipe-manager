@@ -2,6 +2,11 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  buildShoppingListItemsFromRecipe,
+  mergeIntoShoppingList
+} from "../../../lib/shopping-list-storage";
+import { getCurrentUser } from "../../../lib/auth-client";
 import type { Recipe } from "../../../types/recipe";
 
 interface Props {
@@ -36,7 +41,9 @@ export default function RecipeDetailClient({ recipe }: Props) {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [addingToList, setAddingToList] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [listMessage, setListMessage] = useState<string | null>(null);
 
   const scaleFactor = servings / current.servings;
 
@@ -109,6 +116,37 @@ export default function RecipeDetailClient({ recipe }: Props) {
     }
   };
 
+  const handleAddToShoppingList = async () => {
+    if (!current.id) return;
+
+    setAddingToList(true);
+    setError(null);
+    setListMessage(null);
+
+    try {
+      const user = await getCurrentUser();
+
+      if (!user) {
+        throw new Error("Please sign in first.");
+      }
+
+      const additions = buildShoppingListItemsFromRecipe(current, servings);
+      if (additions.length === 0) {
+        setListMessage(`${current.title} has no ingredients to add yet.`);
+        return;
+      }
+
+      mergeIntoShoppingList(user.uid, additions);
+      setListMessage(
+        `${current.title} added to your shopping list for ${servings} portion${servings === 1 ? "" : "s"}.`
+      );
+    } catch (err: any) {
+      setError(err.message || "Failed to add recipe to shopping list");
+    } finally {
+      setAddingToList(false);
+    }
+  };
+
   const renderHeader = () => (
     <section className="rounded-lg bg-white p-4 shadow-sm">
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
@@ -141,7 +179,9 @@ export default function RecipeDetailClient({ recipe }: Props) {
         </div>
         <div className="flex flex-col items-end gap-2 text-sm md:flex-row md:items-center">
           <div className="flex flex-col items-start">
-            <span className="text-xs font-medium text-slate-600">Servings</span>
+            <span className="text-xs font-medium text-slate-600">
+              {editing ? "Servings" : "Portions for shopping list"}
+            </span>
             <div className="flex items-center gap-2">
               <button
                 type="button"
@@ -190,12 +230,22 @@ export default function RecipeDetailClient({ recipe }: Props) {
           </div>
           <div className="flex items-center gap-2">
             {!editing && (
-              <a
-                href={`/recipes/${current.id}/cook`}
-                className="rounded-md bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700"
-              >
-                Cooking mode
-              </a>
+              <>
+                <button
+                  type="button"
+                  onClick={handleAddToShoppingList}
+                  disabled={addingToList}
+                  className="rounded-md border border-emerald-300 px-3 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {addingToList ? "Adding..." : "Add to shopping list"}
+                </button>
+                <a
+                  href={`/recipes/${current.id}/cook`}
+                  className="rounded-md bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700"
+                >
+                  Cooking mode
+                </a>
+              </>
             )}
             {editing ? (
               <>
@@ -416,6 +466,7 @@ export default function RecipeDetailClient({ recipe }: Props) {
           {error}
         </p>
       )}
+      {listMessage && <p className="mt-2 text-sm text-emerald-700">{listMessage}</p>}
     </section>
   );
 

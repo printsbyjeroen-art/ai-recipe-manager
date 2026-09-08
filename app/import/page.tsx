@@ -1,17 +1,17 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { supabaseBrowser } from "../../lib/supabase";
+import { getCurrentUser } from "../../lib/auth-client";
 
 type QueueStatus = "pending" | "processing" | "failed" | "completed";
 
 type QueueItem = {
-  id: number;
+  id: string;
   url: string;
   status: QueueStatus;
   error: string | null;
   response_text?: string | null;
-  recipe_id?: number | null;
+  recipe_id?: string | null;
   process_after?: string | null;
   created_at: string;
   updated_at?: string;
@@ -73,15 +73,13 @@ export default function ImportPage() {
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [queueError, setQueueError] = useState<string | null>(null);
   const [queueLoading, setQueueLoading] = useState(false);
-  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [now, setNow] = useState<number>(() => Date.now());
 
   const loadQueue = async () => {
     setQueueLoading(true);
     try {
-      const {
-        data: { user }
-      } = await supabaseBrowser.auth.getUser();
+      const user = await getCurrentUser();
 
       if (!user) {
         setQueue([]);
@@ -89,7 +87,7 @@ export default function ImportPage() {
         return;
       }
 
-      const res = await fetch(`/api/import-queue?userId=${encodeURIComponent(user.id)}`);
+      const res = await fetch(`/api/import-queue?userId=${encodeURIComponent(user.uid)}`);
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setQueueError(data.error || "Failed to load waiting list");
@@ -134,9 +132,7 @@ export default function ImportPage() {
     setMessage(null);
 
     try {
-      const {
-        data: { user }
-      } = await supabaseBrowser.auth.getUser();
+      const user = await getCurrentUser();
 
       if (!user) {
         throw new Error("Please sign in first.");
@@ -145,7 +141,7 @@ export default function ImportPage() {
       const res = await fetch("/api/import-recipe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: trimmed, userId: user.id })
+        body: JSON.stringify({ url: trimmed, userId: user.uid })
       });
       const data = await res.json().catch(() => ({}));
 
@@ -201,7 +197,7 @@ export default function ImportPage() {
     return `Retry timer: ${formatCountdown(msLeft)} left`;
   };
 
-  const handleDeleteQueueItem = async (id: number) => {
+  const handleDeleteQueueItem = async (id: string) => {
     setDeletingId(id);
     setQueueError(null);
     try {

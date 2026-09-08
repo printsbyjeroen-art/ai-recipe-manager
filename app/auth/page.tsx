@@ -2,7 +2,11 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { supabaseBrowser } from "../../lib/supabase";
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword
+} from "firebase/auth";
+import { auth } from "../../lib/firebase-client";
 
 export default function AuthPage() {
   const [mode, setMode] = useState<"signin" | "signup">("signin");
@@ -18,20 +22,11 @@ export default function AuthPage() {
 
     try {
       if (mode === "signup") {
-        const { error } = await supabaseBrowser.auth.signUp({
-          email,
-          password
-        });
-        if (error) throw error;
+        await createUserWithEmailAndPassword(auth, email, password);
       } else {
-        const { error } = await supabaseBrowser.auth.signInWithPassword({
-          email,
-          password
-        });
-        if (error) throw error;
+        await signInWithEmailAndPassword(auth, email, password);
       }
 
-      // After successful auth, redirect to dashboard
       window.location.href = "/";
     } catch (e: any) {
       setError(e?.message || "Something went wrong");
@@ -119,4 +114,3 @@ export default function AuthPage() {
     </div>
   );
 }
-

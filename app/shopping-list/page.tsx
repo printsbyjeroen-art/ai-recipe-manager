@@ -15,7 +15,7 @@ import {
   readShoppingListFromStorage,
   writeShoppingListToStorage
 } from "../../lib/shopping-list-storage";
-import { supabaseBrowser } from "../../lib/supabase";
+import { getCurrentUser } from "../../lib/auth-client";
 
 type ShoppingListEdit = {
   name: string;
@@ -66,15 +66,13 @@ export default function ShoppingListPage() {
       setLoading(true);
       setError(null);
       try {
-        const {
-          data: { user }
-        } = await supabaseBrowser.auth.getUser();
+        const user = await getCurrentUser();
         if (!user) {
           throw new Error("Please sign in first.");
         }
 
-        setUserId(user.id);
-        setItems(readShoppingListFromStorage(user.id));
+        setUserId(user.uid);
+        setItems(readShoppingListFromStorage(user.uid));
       } catch (err: any) {
         setError(err.message || "Failed to load shopping list");
       } finally {
@@ -247,7 +245,7 @@ export default function ShoppingListPage() {
           <div>
             <h2 className="text-lg font-semibold">Shopping list</h2>
             <p className="text-sm text-slate-600">
-              Your all-in-one shopping list stays here until you delete the list or remove individual items.
+              Your all-in-one shopping list stays here until you manually delete the list or remove individual items. Nothing auto-deletes.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">

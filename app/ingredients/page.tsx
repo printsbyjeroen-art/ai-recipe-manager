@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { STORE_SECTIONS, displayStoreSection, normalizeIngredientName, normalizeStoreSection } from "../../lib/ingredients";
-import { supabaseBrowser } from "../../lib/supabase";
+import { getCurrentUser } from "../../lib/auth-client";
 
 type IngredientProfile = {
   name: string;
@@ -80,23 +80,21 @@ export default function IngredientsPage() {
       setLoading(true);
       setError(null);
       try {
-        const {
-          data: { user }
-        } = await supabaseBrowser.auth.getUser();
+        const user = await getCurrentUser();
 
         if (!user) {
           throw new Error("Please sign in first.");
         }
 
-        setUserId(user.id);
+        setUserId(user.uid);
 
-        const res = await fetch(`/api/ingredients?userId=${encodeURIComponent(user.id)}`);
+        const res = await fetch(`/api/ingredients?userId=${encodeURIComponent(user.uid)}`);
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
           throw new Error(data.error || "Failed to load ingredients");
         }
 
-        setProfiles(mergeProfiles((data.ingredients ?? []) as IngredientProfile[], readLocalProfiles(user.id)));
+        setProfiles(mergeProfiles((data.ingredients ?? []) as IngredientProfile[], readLocalProfiles(user.uid)));
       } catch (err: any) {
         setError(err.message || "Failed to load ingredients");
       } finally {

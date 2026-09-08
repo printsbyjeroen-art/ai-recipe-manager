@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { displayStoreSection, normalizeIngredientName, STORE_SECTIONS } from "../lib/ingredients";
-import { supabaseBrowser } from "../lib/supabase";
+import { getCurrentUser } from "../lib/auth-client";
 import type { DishType, Ingredient, MealType, Recipe } from "../types/recipe";
 
 interface RecipeModalProps {
@@ -64,13 +64,11 @@ export default function RecipeModal({ recipe, onClose, onSave }: RecipeModalProp
   useEffect(() => {
     const loadProfiles = async () => {
       try {
-        const {
-          data: { user }
-        } = await supabaseBrowser.auth.getUser();
+        const user = await getCurrentUser();
 
         if (!user) return;
 
-        const res = await fetch(`/api/ingredients?userId=${encodeURIComponent(user.id)}`);
+        const res = await fetch(`/api/ingredients?userId=${encodeURIComponent(user.uid)}`);
         const data = await res.json().catch(() => ({}));
         if (!res.ok) return;
 

@@ -11,8 +11,8 @@ export type DishType =
   | "other";
 
 export interface Ingredient {
-  id?: number;
-  recipe_id?: number;
+  id?: string;
+  recipe_id?: string;
   name: string;
   amount: number;
   unit: string;
@@ -24,14 +24,14 @@ export interface Ingredient {
 }
 
 export interface Step {
-  id?: number;
-  recipe_id?: number;
+  id?: string;
+  recipe_id?: string;
   step_number: number;
   instruction: string;
 }
 
 export interface Recipe {
-  id?: number;
+  id?: string;
   title: string;
   description: string;
   servings: number;

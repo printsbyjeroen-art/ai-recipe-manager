@@ -2,31 +2,20 @@
 
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
-import { supabaseBrowser } from "../lib/supabase";
+import { onAuthStateChanged, signOut } from "firebase/auth";
+import { auth } from "../lib/firebase-client";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const [loadingUser, setLoadingUser] = useState(true);
   const [user, setUser] = useState<any | null>(null);
 
   useEffect(() => {
-    const init = async () => {
-      const {
-        data: { user }
-      } = await supabaseBrowser.auth.getUser();
-      setUser(user);
+    const unsubscribe = onAuthStateChanged(auth, (nextUser) => {
+      setUser(nextUser);
       setLoadingUser(false);
-    };
-    init();
-
-    const {
-      data: { subscription }
-    } = supabaseBrowser.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
     });
 
-    return () => {
-      subscription.unsubscribe();
-    };
+    return () => unsubscribe();
   }, []);
 
   if (loadingUser) {
@@ -99,7 +88,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           {user ? (
             <button
               onClick={async () => {
-                await supabaseBrowser.auth.signOut();
+                await signOut(auth);
                 window.location.href = "/auth";
               }}
               className="text-xs text-slate-600 hover:underline"

@@ -3,20 +3,20 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { mergeIntoShoppingList } from "../../lib/shopping-list-storage";
-import { supabaseBrowser } from "../../lib/supabase";
+import { getCurrentUser } from "../../lib/auth-client";
 import { WEEK_DAYS, WEEKMENU_SLOT } from "../../lib/weekmenu";
 
 type RecipeSummary = {
-  id: number;
+  id: string;
   title: string;
   servings: number;
 };
 
 type WeekMenuItem = {
-  id: number;
+  id?: string;
   day_of_week: number;
   meal_slot: typeof WEEKMENU_SLOT;
-  recipe_id: number | null;
+  recipe_id: string | null;
   planned_servings: number | null;
   updated_at: string;
 };
@@ -44,14 +44,12 @@ export default function WeekMenuPage() {
     setLoading(true);
     setError(null);
     try {
-      const {
-        data: { user }
-      } = await supabaseBrowser.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) throw new Error("Please sign in first.");
 
       const [menuRes, recipesRes] = await Promise.all([
-        fetch(`/api/weekmenu?userId=${encodeURIComponent(user.id)}`),
-        fetch(`/api/recipes?meal_type=dinner&userId=${encodeURIComponent(user.id)}`)
+        fetch(`/api/weekmenu?userId=${encodeURIComponent(user.uid)}`),
+        fetch(`/api/recipes?meal_type=dinner&userId=${encodeURIComponent(user.uid)}`)
       ]);
 
       const menuData = await menuRes.json();
@@ -86,9 +84,7 @@ export default function WeekMenuPage() {
     setSavingKey(key);
     setError(null);
     try {
-      const {
-        data: { user }
-      } = await supabaseBrowser.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) throw new Error("Please sign in first.");
 
       const res = await fetch("/api/weekmenu", {
@@ -96,7 +92,7 @@ export default function WeekMenuPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           week_start: weekStart || undefined,
-          userId: user.id,
+          userId: user.uid,
           day_of_week: day,
           recipe_id: recipeId,
           planned_servings: recipeId ? plannedServings ?? null : null
@@ -127,15 +123,13 @@ export default function WeekMenuPage() {
     setGenerating(true);
     setError(null);
     try {
-      const {
-        data: { user }
-      } = await supabaseBrowser.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) throw new Error("Please sign in first.");
 
       const res = await fetch("/api/weekmenu/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ week_start: weekStart || undefined, userId: user.id })
+        body: JSON.stringify({ week_start: weekStart || undefined, userId: user.uid })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to generate");
@@ -153,15 +147,13 @@ export default function WeekMenuPage() {
     setError(null);
     setMessage(null);
     try {
-      const {
-        data: { user }
-      } = await supabaseBrowser.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) throw new Error("Please sign in first.");
 
       const res = await fetch("/api/weekmenu/replace", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ week_start: weekStart || undefined, userId: user.id, day_of_week: day })
+        body: JSON.stringify({ week_start: weekStart || undefined, userId: user.uid, day_of_week: day })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to replace");
@@ -183,12 +175,10 @@ export default function WeekMenuPage() {
     setMessage(null);
 
     try {
-      const {
-        data: { user }
-      } = await supabaseBrowser.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) throw new Error("Please sign in first.");
 
-      const params = new URLSearchParams({ userId: user.id });
+      const params = new URLSearchParams({ userId: user.uid });
       if (weekStart) {
         params.set("week_start", weekStart);
       }
@@ -200,7 +190,7 @@ export default function WeekMenuPage() {
       }
 
       const merged = mergeIntoShoppingList(
-        user.id,
+        user.uid,
         (data.items ?? []).map((item: any) => ({ ...item, checked: false, isCustom: false }))
       );
 

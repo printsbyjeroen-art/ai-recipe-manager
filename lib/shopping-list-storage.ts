@@ -1,7 +1,13 @@
-import { normalizeIngredientName, normalizeStoreSection, normalizeText } from "./ingredients";
+import {
+  guessStoreSection,
+  normalizeIngredientName,
+  normalizeStoreSection,
+  normalizeText,
+  normalizeUnit
+} from "./ingredients";
 
 export type ShoppingListRecipeRef = {
-  id: number;
+  id: string;
   title: string;
   plannedServings: number;
 };
@@ -22,8 +28,67 @@ export function getShoppingListStorageKey(userId: string) {
   return `shopping-list:persistent:v3:${userId}`;
 }
 
+function getLegacyShoppingListStorageKeys(userId: string) {
+  return [
+    `shopping-list:persistent:v2:${userId}`,
+    `shopping-list:persistent:${userId}`,
+    `shopping-list:${userId}`
+  ];
+}
+
 export function buildShoppingListItemKey(name: string, unit: string, storeSection?: string | null) {
   return `${normalizeIngredientName(name)}::${normalizeText(unit || "") || "unitless"}::${normalizeStoreSection(storeSection)}`;
+}
+
+export function buildShoppingListItemsFromRecipe(
+  recipe: {
+    id?: number;
+    title: string;
+    servings: number;
+    ingredients?: Array<{
+      name: string;
+      amount: number;
+      unit: string;
+      store_section?: string | null;
+    }>;
+  },
+  plannedServings = recipe.servings
+) {
+  const sourceServings = Math.max(1, Number(recipe.servings) || 1);
+  const targetServings = Math.max(1, Number(plannedServings) || sourceServings);
+
+  const items: PersistedShoppingListItem[] = (recipe.ingredients ?? [])
+    .filter((ingredient) => ingredient?.name?.trim())
+    .map((ingredient) => {
+      const normalizedName = normalizeIngredientName(ingredient.name);
+      const normalizedUnit = normalizeUnit(ingredient.unit || "");
+      const storeSection = normalizeStoreSection(ingredient.store_section || guessStoreSection(ingredient.name));
+      const amount = Number(
+        (((Number(ingredient.amount) || 0) * normalizedUnit.multiplier * targetServings) / sourceServings).toFixed(2)
+      );
+
+      return {
+        key: buildShoppingListItemKey(normalizedName, normalizedUnit.unit, storeSection),
+        name: normalizedName,
+        amount,
+        unit: normalizedUnit.unit,
+        store_section: storeSection,
+        checked: false,
+        isCustom: false,
+        recipeCount: recipe.id ? 1 : 0,
+        recipes: recipe.id
+          ? [
+              {
+                id: recipe.id,
+                title: recipe.title,
+                plannedServings: targetServings
+              }
+            ]
+          : []
+      };
+    });
+
+  return mergeShoppingListItems([], items);
 }
 
 export function mergeShoppingListItems(
@@ -81,14 +146,28 @@ export function mergeShoppingListItems(
 export function readShoppingListFromStorage(userId: string): PersistedShoppingListItem[] {
   if (typeof window === "undefined") return [];
 
-  try {
-    const raw = window.localStorage.getItem(getShoppingListStorageKey(userId));
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
+  const currentKey = getShoppingListStorageKey(userId);
+  const keysToTry = [currentKey, ...getLegacyShoppingListStorageKeys(userId)];
+
+  for (const key of keysToTry) {
+    try {
+      const raw = window.localStorage.getItem(key);
+      if (!raw) continue;
+
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) continue;
+
+      if (key !== currentKey) {
+        window.localStorage.setItem(currentKey, JSON.stringify(parsed));
+      }
+
+      return parsed;
+    } catch {
+      // Try the next legacy key if one exists.
+    }
   }
+
+  return [];
 }
 
 export function writeShoppingListToStorage(userId: string, items: PersistedShoppingListItem[]) {

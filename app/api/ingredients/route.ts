@@ -1,57 +1,9 @@
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "../../../lib/supabase";
+import {
+  getUserRecipeIngredientRows,
+  updateIngredientProfileForUser
+} from "../../../lib/db";
 import { guessStoreSection, normalizeIngredientName, normalizeStoreSection } from "../../../lib/ingredients";
-
-type IngredientRow = {
-  id: number;
-  recipe_id: number;
-  name: string;
-  unit: string;
-  store_section?: string | null;
-  calories_per_100g?: number | null;
-  protein_g_per_100g?: number | null;
-  carbs_g_per_100g?: number | null;
-  fat_g_per_100g?: number | null;
-};
-
-function isMissingColumnError(error: any, column: string) {
-  const message = String(error?.message ?? "").toLowerCase();
-  return message.includes(column.toLowerCase()) && message.includes("does not exist");
-}
-
-async function getUserRecipeIds(userId: string) {
-  const { data, error } = await supabaseAdmin.from("recipes").select("id").eq("user_id", userId);
-  if (error) throw error;
-  return (data ?? []).map((item: any) => Number(item.id)).filter(Boolean) as number[];
-}
-
-async function getIngredientRows(recipeIds: number[]) {
-  if (recipeIds.length === 0) return [] as IngredientRow[];
-
-  const primary = await supabaseAdmin
-    .from("ingredients")
-    .select(
-      "id, recipe_id, name, unit, store_section, calories_per_100g, protein_g_per_100g, carbs_g_per_100g, fat_g_per_100g"
-    )
-    .in("recipe_id", recipeIds)
-    .order("name", { ascending: true });
-
-  let data = primary.data as IngredientRow[] | null;
-  let error = primary.error;
-
-  if (error && isMissingColumnError(error, "store_section")) {
-    const fallback = await supabaseAdmin
-      .from("ingredients")
-      .select("id, recipe_id, name, unit")
-      .in("recipe_id", recipeIds)
-      .order("name", { ascending: true });
-    data = fallback.data as IngredientRow[] | null;
-    error = fallback.error;
-  }
-
-  if (error) throw error;
-  return (data ?? []) as IngredientRow[];
-}
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -62,8 +14,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const recipeIds = await getUserRecipeIds(userId);
-    const rows = await getIngredientRows(recipeIds);
+    const rows = await getUserRecipeIngredientRows(userId);
 
     const grouped = new Map<
       string,
@@ -144,17 +95,7 @@ export async function PUT(request: Request) {
   }
 
   try {
-    const recipeIds = await getUserRecipeIds(body.userId);
-    const rows = await getIngredientRows(recipeIds);
     const normalized = normalizeIngredientName(body.name);
-    const targetIds = rows
-      .filter((row) => normalizeIngredientName(row.name) === normalized)
-      .map((row) => row.id);
-
-    if (targetIds.length === 0) {
-      return NextResponse.json({ ok: true, storedInDb: false });
-    }
-
     const updatePayload = {
       store_section: normalizeStoreSection(body.store_section),
       calories_per_100g: Math.max(0, Number(body.calories_per_100g) || 0),
@@ -164,21 +105,14 @@ export async function PUT(request: Request) {
       unit: body.default_unit ?? ""
     };
 
-    const { error } = await supabaseAdmin.from("ingredients").update(updatePayload).in("id", targetIds);
+    const storedInDb = await updateIngredientProfileForUser(
+      body.userId,
+      normalized,
+      updatePayload,
+      (name) => normalizeIngredientName(name) === normalized
+    );
 
-    if (error && isMissingColumnError(error, "store_section")) {
-      return NextResponse.json({
-        ok: true,
-        storedInDb: false,
-        warning: "Run the latest Supabase schema SQL to sync ingredient profile fields to the database."
-      });
-    }
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    return NextResponse.json({ ok: true, storedInDb: true });
+    return NextResponse.json({ ok: true, storedInDb });
   } catch (error: any) {
     return NextResponse.json({ error: error?.message || "Failed to save ingredient profile" }, { status: 500 });
   }
@@ -194,35 +128,20 @@ export async function DELETE(request: Request) {
   }
 
   try {
-    const recipeIds = await getUserRecipeIds(userId);
-    const rows = await getIngredientRows(recipeIds);
     const normalized = normalizeIngredientName(name);
-    const targetIds = rows
-      .filter((row) => normalizeIngredientName(row.name) === normalized)
-      .map((row) => row.id);
-
-    if (targetIds.length === 0) {
-      return NextResponse.json({ ok: true });
-    }
-
-    const { error } = await supabaseAdmin
-      .from("ingredients")
-      .update({
+    await updateIngredientProfileForUser(
+      userId,
+      normalized,
+      {
         store_section: "miscellaneous",
         calories_per_100g: 0,
         protein_g_per_100g: 0,
         carbs_g_per_100g: 0,
-        fat_g_per_100g: 0
-      })
-      .in("id", targetIds);
-
-    if (error && isMissingColumnError(error, "store_section")) {
-      return NextResponse.json({ ok: true, storedInDb: false });
-    }
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
+        fat_g_per_100g: 0,
+        unit: ""
+      },
+      (rowName) => normalizeIngredientName(rowName) === normalized
+    );
 
     return NextResponse.json({ ok: true, storedInDb: true });
   } catch (error: any) {

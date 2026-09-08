@@ -2,9 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import {
+  buildShoppingListItemsFromRecipe,
+  mergeIntoShoppingList
+} from "../lib/shopping-list-storage";
 import type { MealType, DishType, Recipe } from "../types/recipe";
 import RecipeModal from "./RecipeModal";
-import { supabaseBrowser } from "../lib/supabase";
+import { getCurrentUserId } from "../lib/auth-client";
 
 interface RecipeSummary extends Omit<Recipe, "ingredients" | "steps"> {}
 
@@ -37,12 +41,13 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingRecipe, setEditingRecipe] = useState<Recipe | null>(null);
+  const [addingToListId, setAddingToListId] = useState<string | null>(null);
+  const [shoppingListPortions, setShoppingListPortions] = useState<Record<string, number>>({});
+  const [shoppingListMessage, setShoppingListMessage] = useState<string | null>(null);
+  const [shoppingListError, setShoppingListError] = useState<string | null>(null);
 
   const getUserId = async () => {
-    const {
-      data: { user }
-    } = await supabaseBrowser.auth.getUser();
-    return user?.id ?? null;
+    return getCurrentUserId();
   };
 
   const fetchRecipes = async () => {
@@ -85,10 +90,57 @@ export default function DashboardPage() {
       });
   };
 
-  const handleDeleteRecipe = async (id: number) => {
+  const handleDeleteRecipe = async (id: string) => {
     if (!confirm("Are you sure you want to delete this recipe?")) return;
     await fetch(`/api/recipes/${id}`, { method: "DELETE" });
     fetchRecipes();
+  };
+
+  const getSelectedPortions = (recipe: RecipeSummary) => {
+    if (!recipe.id) return Math.max(1, recipe.servings || 1);
+    return Math.max(1, shoppingListPortions[recipe.id] || recipe.servings || 1);
+  };
+
+  const handleAddToShoppingList = async (recipe: RecipeSummary) => {
+    if (!recipe.id) return;
+
+    setAddingToListId(recipe.id);
+    setShoppingListError(null);
+    setShoppingListMessage(null);
+
+    try {
+      const userId = await getUserId();
+      if (!userId) {
+        throw new Error("Please sign in first.");
+      }
+
+      const res = await fetch(`/api/recipes/${recipe.id}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to load recipe ingredients");
+      }
+
+      const fullRecipe = data.recipe as Recipe | undefined;
+      if (!fullRecipe) {
+        throw new Error("Recipe not found.");
+      }
+
+      const selectedPortions = getSelectedPortions(recipe);
+      const additions = buildShoppingListItemsFromRecipe(fullRecipe, selectedPortions);
+      if (additions.length === 0) {
+        setShoppingListMessage(`${fullRecipe.title} has no ingredients to add yet.`);
+        return;
+      }
+
+      mergeIntoShoppingList(userId, additions);
+      setShoppingListMessage(
+        `${fullRecipe.title} added to your shopping list for ${selectedPortions} portion${selectedPortions === 1 ? "" : "s"}. It will stay there until you delete it manually.`
+      );
+    } catch (err: any) {
+      setShoppingListError(err.message || "Failed to add recipe to shopping list");
+    } finally {
+      setAddingToListId(null);
+    }
   };
 
   const handleSaveRecipe = async (recipe: Recipe) => {
@@ -179,6 +231,8 @@ export default function DashboardPage() {
             </div>
           </div>
         </div>
+        {shoppingListError && <p className="mt-3 text-sm text-red-600">{shoppingListError}</p>}
+        {shoppingListMessage && <p className="mt-3 text-sm text-emerald-700">{shoppingListMessage}</p>}
       </motion.section>
 
       <section className="space-y-6">
@@ -245,7 +299,25 @@ export default function DashboardPage() {
                           F {Number(recipe.fat_g || 0).toFixed(1)}g
                         </span>
                       </div>
-                      <div className="mt-auto flex gap-2 text-sm">
+                      <div className="mb-3 flex items-center justify-between gap-3 rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-700">
+                        <label htmlFor={`portions-${recipe.id}`} className="font-medium">
+                          Portions for shopping list
+                        </label>
+                        <input
+                          id={`portions-${recipe.id}`}
+                          type="number"
+                          min={1}
+                          value={getSelectedPortions(recipe)}
+                          onChange={(e) =>
+                            setShoppingListPortions((prev) => ({
+                              ...prev,
+                              [recipe.id!]: Math.max(1, Number(e.target.value) || 1)
+                            }))
+                          }
+                          className="w-20 rounded-md border border-slate-300 px-2 py-1 text-right text-sm"
+                        />
+                      </div>
+                      <div className="mt-auto flex flex-wrap gap-2 text-sm">
                         <motion.a
                           href={`/recipes/${recipe.id}`}
                           className="flex-1 rounded-md bg-slate-900 px-3 py-2 text-center text-white hover:bg-slate-800"
@@ -260,6 +332,14 @@ export default function DashboardPage() {
                         >
                           Cook
                         </motion.a>
+                        <motion.button
+                          onClick={() => handleAddToShoppingList(recipe)}
+                          disabled={addingToListId === recipe.id}
+                          className="rounded-md border border-emerald-300 px-3 py-2 text-center text-emerald-700 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
+                          whileTap={{ scale: 0.96 }}
+                        >
+                          {addingToListId === recipe.id ? "Adding..." : "Add to list"}
+                        </motion.button>
                         <motion.button
                           onClick={() => handleEditRecipe(recipe)}
                           className="rounded-md border border-blue-300 px-3 py-2 text-center text-blue-600 hover:bg-blue-50"

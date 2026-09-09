@@ -61,6 +61,12 @@ const SECTION_ALIASES: Record<string, StoreSection> = {
 };
 
 const INGREDIENT_TOKEN_ALIASES: Record<string, string> = {
+  zeezout: "zout",
+  keukenzout: "zout",
+  tafelzout: "zout",
+  knoflookpoeder: "knoflook",
+  zwartepeper: "peper",
+  versgemalenpeper: "peper",
   tomatoes: "tomato",
   tomaatjes: "tomaat",
   uien: "ui",
@@ -219,6 +225,62 @@ export function displayStoreSection(value?: string | null) {
 export function normalizeUnit(unit: string): NormalizedUnit {
   const normalized = normalizeText(unit);
   return UNIT_ALIASES[normalized] ?? { unit: normalized, multiplier: 1 };
+}
+
+export function normalizeImportedAmount(amount: number, unit: string, name: string) {
+  const normalizedUnit = normalizeText(unit);
+  const normalizedName = normalizeIngredientName(name);
+  const numericAmount = Number(amount) || 0;
+
+  if (["g", "gr", "gram", "grams"].includes(normalizedUnit)) {
+    return { amount: numericAmount, unit: "g" };
+  }
+  if (["kg", "kilo", "kilogram", "kilograms"].includes(normalizedUnit)) {
+    return { amount: numericAmount * 1000, unit: "g" };
+  }
+  if (["ml", "milliliter", "milliliters"].includes(normalizedUnit)) {
+    return { amount: numericAmount, unit: "ml" };
+  }
+  if (["l", "liter", "liters"].includes(normalizedUnit)) {
+    return { amount: numericAmount * 1000, unit: "ml" };
+  }
+  if (["el", "eetlepel", "eetlepels", "tablespoon", "tablespoons", "tbsp"].includes(normalizedUnit)) {
+    return { amount: numericAmount * 15, unit: "ml" };
+  }
+  if (["tl", "theelepel", "theelepels", "teaspoon", "teaspoons", "tsp"].includes(normalizedUnit)) {
+    return { amount: numericAmount * 5, unit: "ml" };
+  }
+  if (["handje", "handvol", "handful"].includes(normalizedUnit)) {
+    return { amount: numericAmount * (normalizedName.includes("basilicum") ? 10 : 15), unit: "g" };
+  }
+  if (["snuf", "snufje", "pinch", "pinches"].includes(normalizedUnit)) {
+    return { amount: numericAmount, unit: "g" };
+  }
+  if (["bos", "bossen", "bunch", "bunches"].includes(normalizedUnit)) {
+    return { amount: numericAmount * 50, unit: "g" };
+  }
+  if (["teen", "tenen", "clove", "cloves"].includes(normalizedUnit)) {
+    return { amount: numericAmount * 3, unit: "g" };
+  }
+  if (["blik", "blikken", "can", "cans"].includes(normalizedUnit)) {
+    return { amount: numericAmount * 400, unit: "g" };
+  }
+  if (["st", "stuk", "stuks", "piece", "pieces"].includes(normalizedUnit)) {
+    const pieceWeights: Array<[string, number]> = [
+      ["ei", 50],
+      ["ui", 100],
+      ["tomaat", 100],
+      ["paprika", 150],
+      ["citroen", 100],
+      ["limoen", 70],
+      ["avocado", 200],
+      ["banaan", 120]
+    ];
+    const weight = pieceWeights.find(([keyword]) => normalizedName.includes(keyword))?.[1] ?? 100;
+    return { amount: numericAmount * weight, unit: "g" };
+  }
+
+  return { amount: numericAmount, unit: "g" };
 }
 
 export function guessStoreSection(name: string): StoreSection {

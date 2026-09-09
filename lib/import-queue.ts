@@ -1,5 +1,10 @@
 import * as cheerio from "cheerio";
-import { guessStoreSection, normalizeStoreSection } from "./ingredients";
+import {
+  guessStoreSection,
+  normalizeImportedAmount,
+  normalizeIngredientName,
+  normalizeStoreSection
+} from "./ingredients";
 import {
   createRecipe,
   updateImportQueueItem,
@@ -12,6 +17,7 @@ import {
   generateGeminiContent,
   RECIPE_EXTRACTION_PROMPT
 } from "./gemini";
+import { getUserRecipeIngredientRows } from "./db";
 
 export type { ImportQueueItem, ImportQueueStatus } from "./db";
 
@@ -106,6 +112,8 @@ export async function processQueueItem(
     }
 
     const pageText = await fetchPageText(item.url);
+    const existingIngredientRows = await getUserRecipeIngredientRows(recipeOwnerId);
+    const existingIngredientNames = [...new Set(existingIngredientRows.map((row) => row.name).filter(Boolean))];
 
     const prompt = `${RECIPE_EXTRACTION_PROMPT}
 
@@ -119,7 +127,7 @@ ${pageText}`;
 
     let recipe = parseGeminiJsonResponse<any>(raw);
     try {
-      const normalizedRecipe = await normalizeRecipeToDutch(recipe);
+      const normalizedRecipe = await normalizeRecipeToDutch(recipe, existingIngredientNames);
       recipe = normalizedRecipe.recipe;
     } catch (normalizationError: any) {
       console.warn("[import] Dutch normalization failed; using extracted recipe", {
@@ -128,6 +136,26 @@ ${pageText}`;
         message: normalizationError?.message
       });
     }
+    const existingNamesByNormalized = new Map<string, string>();
+    for (const row of existingIngredientRows) {
+      const normalized = normalizeIngredientName(row.name);
+      if (normalized && !existingNamesByNormalized.has(normalized)) {
+        existingNamesByNormalized.set(normalized, row.name);
+      }
+    }
+
+    recipe.ingredients = Array.isArray(recipe.ingredients)
+      ? recipe.ingredients.map((ingredient: any) => {
+          const canonicalName = existingNamesByNormalized.get(normalizeIngredientName(ingredient.name)) ?? ingredient.name;
+          const normalizedAmount = normalizeImportedAmount(ingredient.amount, ingredient.unit, canonicalName);
+          return {
+            ...ingredient,
+            name: canonicalName,
+            amount: Number(normalizedAmount.amount.toFixed(2)),
+            unit: normalizedAmount.unit
+          };
+        })
+      : [];
     recipe.source_url = item.url;
     raw = JSON.stringify(recipe, null, 2);
 

@@ -126,7 +126,10 @@ export function parseGeminiJsonResponse<T>(value: string): T {
   return JSON.parse(stripJsonCodeFences(value)) as T;
 }
 
-export async function normalizeRecipeToDutch(recipe: Partial<Recipe>) {
+export async function normalizeRecipeToDutch(recipe: Partial<Recipe>, existingIngredientNames: string[] = []) {
+  const existingNames = existingIngredientNames.length
+    ? existingIngredientNames.join(", ")
+    : "(nog geen opgeslagen ingredienten)";
   const prompt = `
 You are a recipe localization assistant for a Dutch cooking app.
 
@@ -152,7 +155,7 @@ Return exactly this JSON shape:
       {
         "name": string,
         "amount": number,
-        "unit": string,
+        "unit": "g" | "ml",
         "store_section": "produce" | "bakery" | "dairy" | "meat" | "fish" | "frozen" | "pantry" | "spices" | "drinks" | "snacks" | "household" | "miscellaneous"
       }
     ],
@@ -170,12 +173,17 @@ Rules:
 - Always translate all user-facing text to natural Dutch.
 - Keep "meal_type", "dish_type", and "store_section" enum values in English exactly as required above.
 - Preserve numeric values as closely as possible.
+- Convert every ingredient to grams (g) or milliliters (ml). Estimate common measures such as a handful of basilicum as about 10 g. Do not return units such as handje, bos, snuf, stuk, teen, el, or tl.
+- Prefer an existing ingredient name from this user's database whenever it matches. Treat synonyms and variants as the same ingredient, for example "zeezout" and "keukenzout" become "zout".
 - Use concise Dutch ingredient names and Dutch cooking instructions.
 - Normalize units to Dutch-friendly abbreviations like "g", "ml", "el", "tl", "st", "teen", "blik", "bos", "snuf" when appropriate.
 - Always respond with only valid JSON.
 
 Recipe JSON:
 ${JSON.stringify(recipe)}
+
+Existing ingredient names in this user's database:
+${existingNames}
 `;
 
   const result = await generateGeminiContent(prompt, "normalize");

@@ -118,8 +118,16 @@ ${pageText}`;
     raw = result.response.text();
 
     let recipe = parseGeminiJsonResponse<any>(raw);
-    const normalizedRecipe = await normalizeRecipeToDutch(recipe);
-    recipe = normalizedRecipe.recipe;
+    try {
+      const normalizedRecipe = await normalizeRecipeToDutch(recipe);
+      recipe = normalizedRecipe.recipe;
+    } catch (normalizationError: any) {
+      console.warn("[import] Dutch normalization failed; using extracted recipe", {
+        queueId: item.id,
+        transient: isTransientError(normalizationError),
+        message: normalizationError?.message
+      });
+    }
     recipe.source_url = item.url;
     raw = JSON.stringify(recipe, null, 2);
 

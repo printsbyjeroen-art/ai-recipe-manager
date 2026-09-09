@@ -14,7 +14,7 @@ dfd
 ### Environment variables
 
 Create a `.env.local` file based on `.env.example`:
-
+asdfasdf
 ```bash
 copy .env.example .env.local
 ```

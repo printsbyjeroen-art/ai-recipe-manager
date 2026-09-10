@@ -18,7 +18,6 @@ type QueueItem = {
   last_attempt_at: string | null;
 };
 
-const DAILY_LIMIT = 20;
 const RETRY_MINUTES = 5;
 const RETRY_MS = RETRY_MINUTES * 60 * 1000;
 
@@ -118,11 +117,6 @@ export default function ImportPage() {
     [queue]
   );
 
-  const dailyUsage = useMemo(() => {
-    const since = Date.now() - 24 * 60 * 60 * 1000;
-    return queue.filter((q) => new Date(q.created_at).getTime() >= since).length;
-  }, [queue, now]);
-
   const handleImport = async () => {
     const trimmed = url.trim();
     if (!trimmed) return;
@@ -153,10 +147,6 @@ export default function ImportPage() {
         setMessage(`Already in waiting list (status: ${data.queueStatus ?? "pending"}).`);
       } else if (data.status === "duplicate_in_dashboard") {
         setMessage("This link already exists in your dashboard recipes.");
-      } else if (data.status === "rate_limit_queued") {
-        setMessage(
-          `Daily limit reached (${DAILY_LIMIT}/day). Your recipe is on the 24-hour waitlist and will import automatically.`
-        );
       } else if (data.status === "imported") {
         setMessage("Imported and saved successfully.");
       } else if (data.status === "queued") {
@@ -240,10 +230,6 @@ export default function ImportPage() {
           >
             {loading ? "Submitting..." : "Import"}
           </button>
-
-          <p className="text-xs text-slate-500">
-            Daily usage: <span className={dailyUsage >= DAILY_LIMIT ? "font-semibold text-amber-700" : ""}>{dailyUsage} / {DAILY_LIMIT}</span> imports in the last 24 hours
-          </p>
 
           {message && <p className="text-sm text-slate-700">{message}</p>}
           {error && <p className="text-sm text-red-600">{error}</p>}

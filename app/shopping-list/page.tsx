@@ -39,6 +39,20 @@ function itemLabel(item: Pick<PersistedShoppingListItem, "amount" | "unit" | "na
   return [amountText, item.unit?.trim(), item.name].filter(Boolean).join(" ");
 }
 
+function buildWhatsAppText(items: PersistedShoppingListItem[]) {
+  const sections = new Map<string, string[]>();
+
+  for (const item of items.filter((entry) => !entry.checked)) {
+    const section = displayStoreSection(normalizeStoreSection(item.store_section));
+    if (!sections.has(section)) sections.set(section, []);
+    sections.get(section)!.push(`- ${itemLabel(item)}`);
+  }
+
+  return [...sections.entries()]
+    .map(([section, sectionItems]) => `${section}\n${sectionItems.join("\n")}`)
+    .join("\n\n");
+}
+
 export default function ShoppingListPage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [items, setItems] = useState<PersistedShoppingListItem[]>([]);
@@ -208,6 +222,16 @@ export default function ShoppingListPage() {
     saveItems(items.map((item) => ({ ...item, checked: false })));
   }
 
+  function shareViaWhatsApp() {
+    const text = buildWhatsAppText(items);
+    if (!text) {
+      setMessage("There are no unchecked items to share.");
+      return;
+    }
+
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank", "noopener,noreferrer");
+  }
+
   const checkedCount = items.filter((item) => item.checked).length;
   const customCount = items.filter((item) => item.isCustom).length;
 
@@ -269,6 +293,13 @@ export default function ShoppingListPage() {
               className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-medium hover:bg-slate-50"
             >
               Uncheck all
+            </button>
+            <button
+              type="button"
+              onClick={shareViaWhatsApp}
+              className="rounded-md bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-700"
+            >
+              Share via WhatsApp
             </button>
             <button
               type="button"
@@ -403,6 +434,18 @@ export default function ShoppingListPage() {
                                     : `Exported from your week menu${item.recipeCount ? ` · ${item.recipeCount} recipe${item.recipeCount === 1 ? "" : "s"}` : ""}.`}
                                 </div>
                               </button>
+
+                              {!item.isCustom && (item.recipes?.length ?? 0) > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => setOpenItems((prev) => ({ ...prev, [item.key]: !prev[item.key] }))}
+                                  aria-label={`Show recipes for ${item.name}`}
+                                  title="Show recipes"
+                                  className="mt-1 inline-flex h-4 w-4 items-center justify-center rounded-full border border-slate-400 text-[10px] font-semibold leading-none text-slate-600 hover:border-blue-600 hover:text-blue-700"
+                                >
+                                  i
+                                </button>
+                              )}
 
                               <AnimatePresence>
                                 {isEditing && (

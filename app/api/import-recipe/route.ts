@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import {
-  countRecentImports,
   createImportQueueItem,
   listOpenImportQueue,
   listRecipesWithSourceUrl
@@ -85,26 +84,6 @@ export async function POST(request: Request) {
         status: "duplicate_in_dashboard",
         recipeId: duplicateRecipe.id,
         message: "This link already exists in your dashboard recipes."
-      });
-    }
-
-    const DAILY_LIMIT = 20;
-    const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    const recentCount = await countRecentImports(userId, since24h);
-
-    if (recentCount >= DAILY_LIMIT) {
-      const processAfter = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-      const waitItem = await createImportQueueItem({
-        userId,
-        url: normalizedUrl,
-        process_after: processAfter
-      });
-
-      return NextResponse.json({
-        status: "rate_limit_queued",
-        queueId: waitItem.id,
-        processAfter,
-        message: `You've reached the ${DAILY_LIMIT} imports/day limit. This recipe has been added to the 24-hour waitlist and will be processed automatically.`
       });
     }
 

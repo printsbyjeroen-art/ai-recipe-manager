@@ -53,16 +53,74 @@ function num(value: any, fallback = 0): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function isSecurityChallenge(text: string) {
+  const normalized = text.toLowerCase();
+  return normalized.includes("performing security verification") ||
+    normalized.includes("just a moment") ||
+    normalized.includes("captcha");
+}
+
 async function fetchPageText(url: string): Promise<string> {
   const startedAt = Date.now();
   console.info("[import] page fetch started", { url });
   const res = await fetch(url, {
     headers: {
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      "Accept-Language": "en-US,en;q=0.9",
+      Referer: new URL(url).origin,
       "User-Agent":
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36"
     }
   });
-  if (!res.ok) {
+
+  let html: string;
+  if (res.ok) {
+    html = await res.text();
+  } else if ([401, 403, 429].includes(res.status)) {
+    const readerRes = await fetch(`https://r.jina.ai/http://${url.replace(/^https?:\/\//, "")}`, {
+      headers: { Accept: "text/plain", "User-Agent": "ai-recipe-manager/1.0" }
+    });
+    if (readerRes.ok) {
+      const readerText = (await readerRes.text()).trim();
+      if (readerText && !isSecurityChallenge(readerText)) {
+        console.info("[import] reader fallback completed", {
+          url,
+          durationMs: Date.now() - startedAt,
+          textLength: readerText.length
+        });
+        return readerText;
+      }
+    }
+
+    const originalUrl = new URL(url);
+    const translatedUrl = new URL(
+      `https://${originalUrl.hostname.replace(/\./g, "-")}.translate.goog${originalUrl.pathname}`
+    );
+    originalUrl.searchParams.forEach((value, key) => translatedUrl.searchParams.set(key, value));
+    translatedUrl.searchParams.set("_x_tr_sl", "auto");
+    translatedUrl.searchParams.set("_x_tr_tl", "en");
+    translatedUrl.searchParams.set("_x_tr_hl", "en");
+
+    const translatedRes = await fetch(translatedUrl, {
+      headers: { Accept: "text/html", "User-Agent": "ai-recipe-manager/1.0" }
+    });
+    if (!translatedRes.ok) {
+      console.error("[import] fallback fetch failed", {
+        url,
+        status: res.status,
+        readerStatus: readerRes.status,
+        translatedStatus: translatedRes.status,
+        durationMs: Date.now() - startedAt
+      });
+      throw new Error(`Failed to fetch page: ${res.status}`);
+    }
+
+    const translatedHtml = await translatedRes.text();
+    if (isSecurityChallenge(translatedHtml)) {
+      throw new Error(`Failed to fetch page: ${res.status} (the site requires browser verification)`);
+    }
+    html = translatedHtml;
+  } else {
     console.error("[import] page fetch failed", {
       url,
       status: res.status,
@@ -70,7 +128,7 @@ async function fetchPageText(url: string): Promise<string> {
     });
     throw new Error(`Failed to fetch page: ${res.status}`);
   }
-  const html = await res.text();
+
   const $ = cheerio.load(html);
 
   $("script, style, noscript").remove();

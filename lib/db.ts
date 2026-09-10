@@ -456,3 +456,37 @@ export async function updateIngredientProfileForUser(
 
   return changed > 0;
 }
+
+export async function renameIngredientForUser(userId: string, fromName: string, toName: string) {
+  const snap = await recipesCol().where("userId", "==", userId).get();
+  const normalizedFrom = fromName.trim().toLocaleLowerCase();
+  const updates: Array<{ ref: FirebaseFirestore.DocumentReference; ingredients: Ingredient[] }> = [];
+  let changedRecipes = 0;
+  let changedIngredients = 0;
+
+  for (const doc of snap.docs) {
+    const ingredients = (doc.data().ingredients ?? []) as Ingredient[];
+    let touched = false;
+    const nextIngredients = ingredients.map((ingredient) => {
+      if (ingredient.name.trim().toLocaleLowerCase() !== normalizedFrom) return ingredient;
+      touched = true;
+      changedIngredients += 1;
+      return { ...ingredient, name: toName.trim() };
+    });
+
+    if (touched) {
+      updates.push({ ref: doc.ref, ingredients: nextIngredients });
+      changedRecipes += 1;
+    }
+  }
+
+  for (let index = 0; index < updates.length; index += 450) {
+    const batch = getAdminDb().batch();
+    for (const update of updates.slice(index, index + 450)) {
+      batch.update(update.ref, { ingredients: update.ingredients });
+    }
+    await batch.commit();
+  }
+
+  return { changedRecipes, changedIngredients };
+}

@@ -59,6 +59,7 @@ export default function IngredientsPage() {
   const [profiles, setProfiles] = useState<IngredientProfile[]>([]);
   const [loading, setLoading] = useState(false);
   const [savingKey, setSavingKey] = useState<string | null>(null);
+  const [replacementNames, setReplacementNames] = useState<Record<string, string>>({});
   const [search, setSearch] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -172,6 +173,35 @@ export default function IngredientsPage() {
       setMessage(`Removed ${profile.name} from the ingredient tab.`);
     } catch (err: any) {
       setError(err.message || "Failed to remove ingredient profile");
+    } finally {
+      setSavingKey(null);
+    }
+  }
+
+  async function replaceIngredient(profile: IngredientProfile) {
+    if (!userId) return;
+    const replacement = replacementNames[profile.normalized_name]?.trim();
+    if (!replacement || replacement === profile.name) return;
+    if (!window.confirm(`Replace ${profile.name} with ${replacement} in all recipes?`)) return;
+
+    setSavingKey(profile.normalized_name);
+    setError(null);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/ingredients", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, fromName: profile.name, toName: replacement })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Failed to replace ingredient");
+      setMessage(`Replaced ${profile.name} in ${data.changedRecipes} recipe${data.changedRecipes === 1 ? "" : "s"}.`);
+      const refreshed = await fetch(`/api/ingredients?userId=${encodeURIComponent(userId)}`);
+      const refreshedData = await refreshed.json().catch(() => ({}));
+      if (refreshed.ok) setProfiles(mergeProfiles(refreshedData.ingredients ?? [], readLocalProfiles(userId)));
+      setReplacementNames((prev) => ({ ...prev, [profile.normalized_name]: "" }));
+    } catch (err: any) {
+      setError(err.message || "Failed to replace ingredient");
     } finally {
       setSavingKey(null);
     }
@@ -431,6 +461,25 @@ export default function IngredientsPage() {
                   >
                     {savingKey === profile.normalized_name ? "Saving..." : "Save"}
                   </button>
+                  <div className="flex gap-1 md:col-span-2">
+                    <input
+                      type="text"
+                      value={replacementNames[profile.normalized_name] ?? ""}
+                      onChange={(e) =>
+                        setReplacementNames((prev) => ({ ...prev, [profile.normalized_name]: e.target.value }))
+                      }
+                      placeholder="Replace with..."
+                      className="min-w-0 flex-1 rounded-md border border-slate-300 px-2 py-2 text-sm"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => replaceIngredient(profile)}
+                      disabled={savingKey === profile.normalized_name}
+                      className="rounded-md border border-blue-300 bg-white px-2 py-2 text-xs font-medium text-blue-700 hover:bg-blue-50 disabled:opacity-60"
+                    >
+                      Replace all
+                    </button>
+                  </div>
                   <button
                     type="button"
                     onClick={() => deleteProfile(profile)}

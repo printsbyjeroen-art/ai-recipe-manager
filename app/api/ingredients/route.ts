@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import {
   getUserRecipeIngredientRows,
+  renameIngredientForUser,
   updateIngredientProfileForUser
 } from "../../../lib/db";
 import { guessStoreSection, normalizeIngredientName, normalizeStoreSection } from "../../../lib/ingredients";
@@ -146,5 +147,30 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ ok: true, storedInDb: true });
   } catch (error: any) {
     return NextResponse.json({ error: error?.message || "Failed to reset ingredient profile" }, { status: 500 });
+  }
+}
+
+export async function POST(request: Request) {
+  const body = (await request.json()) as {
+    userId?: string;
+    fromName?: string;
+    toName?: string;
+  };
+
+  if (!body.userId || !body.fromName?.trim() || !body.toName?.trim()) {
+    return NextResponse.json({ error: "Missing userId, fromName or toName" }, { status: 400 });
+  }
+
+  const fromName = normalizeIngredientName(body.fromName);
+  const toName = normalizeIngredientName(body.toName);
+  if (!fromName || !toName || fromName === toName) {
+    return NextResponse.json({ error: "Choose a different ingredient name" }, { status: 400 });
+  }
+
+  try {
+    const result = await renameIngredientForUser(body.userId, fromName, toName);
+    return NextResponse.json({ ok: true, ...result });
+  } catch (error: any) {
+    return NextResponse.json({ error: error?.message || "Failed to rename ingredient" }, { status: 500 });
   }
 }

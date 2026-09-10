@@ -33,6 +33,11 @@ const dishTypes: Recipe["dish_type"][] = [
   "other"
 ];
 
+function formatRecipeAmount(amount: number) {
+  if (!Number.isFinite(amount)) return "0";
+  return Number.isInteger(amount) ? String(amount) : amount.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
+}
+
 export default function RecipeDetailClient({ recipe }: Props) {
   const router = useRouter();
 
@@ -51,6 +56,28 @@ export default function RecipeDetailClient({ recipe }: Props) {
     current.text_scaling_version === 1
       ? scaleRecipeText(text, current.ingredients, scaleFactor)
       : text;
+
+  const shareViaWhatsApp = () => {
+    const ingredientLines = current.ingredients.map((ingredient) => {
+      const amount = formatRecipeAmount(ingredient.amount * scaleFactor);
+      return `- ${amount}${ingredient.unit ? ` ${ingredient.unit}` : ""} ${ingredient.name}`;
+    });
+    const stepLines = current.steps.map(
+      (step) => `${step.step_number}. ${displayText(step.instruction)}`
+    );
+    const sections = [
+      `*${current.title}*`,
+      `Porties: ${formatRecipeAmount(servings)}`,
+      "",
+      "*Ingredienten*",
+      ...ingredientLines,
+      ...(current.description ? ["", "*Omschrijving*", displayText(current.description)] : []),
+      ...(stepLines.length > 0 ? ["", "*Bereiding*", ...stepLines] : []),
+      ...(current.source_url ? ["", current.source_url] : [])
+    ];
+
+    window.open(`https://wa.me/?text=${encodeURIComponent(sections.join("\n"))}`, "_blank", "noopener,noreferrer");
+  };
 
   const handleStartEdit = () => {
     setDraft(current);
@@ -243,6 +270,13 @@ export default function RecipeDetailClient({ recipe }: Props) {
                   className="rounded-md border border-emerald-300 px-3 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {addingToList ? "Adding..." : "Add to shopping list"}
+                </button>
+                <button
+                  type="button"
+                  onClick={shareViaWhatsApp}
+                  className="rounded-md border border-emerald-300 px-3 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-50"
+                >
+                  Share via WhatsApp
                 </button>
                 <a
                   href={`/recipes/${current.id}/cook`}

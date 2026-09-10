@@ -7,6 +7,7 @@ import {
   mergeIntoShoppingList
 } from "../../../lib/shopping-list-storage";
 import { getCurrentUser } from "../../../lib/auth-client";
+import { scaleRecipeText } from "../../../lib/recipe-scaling";
 import type { Recipe } from "../../../types/recipe";
 
 interface Props {
@@ -46,6 +47,10 @@ export default function RecipeDetailClient({ recipe }: Props) {
   const [listMessage, setListMessage] = useState<string | null>(null);
 
   const scaleFactor = servings / current.servings;
+  const displayText = (text: string) =>
+    current.text_scaling_version === 1
+      ? scaleRecipeText(text, current.ingredients, scaleFactor)
+      : text;
 
   const handleStartEdit = () => {
     setDraft(current);
@@ -173,7 +178,7 @@ export default function RecipeDetailClient({ recipe }: Props) {
           ) : (
             <>
               <h2 className="text-xl font-semibold">{current.title}</h2>
-              <p className="text-sm text-slate-600">{current.description}</p>
+              <p className="text-sm text-slate-600">{displayText(current.description)}</p>
             </>
           )}
         </div>
@@ -565,7 +570,7 @@ export default function RecipeDetailClient({ recipe }: Props) {
                 }}
               />
             ) : (
-              <p className="text-slate-800">{step.instruction}</p>
+              <p className="text-slate-800">{displayText(step.instruction)}</p>
             )}
           </li>
         ))}

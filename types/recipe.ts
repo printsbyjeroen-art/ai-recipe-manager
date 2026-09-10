@@ -44,6 +44,7 @@ export interface Recipe {
   prep_time: number;
   cook_time: number;
   source_url: string;
+  text_scaling_version?: number;
   created_at?: string;
   ingredients: Ingredient[];
   steps: Step[];

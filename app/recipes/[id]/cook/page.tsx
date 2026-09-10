@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { Recipe } from "../../../../types/recipe";
+import { scaleRecipeText } from "../../../../lib/recipe-scaling";
 
 async function fetchRecipe(id: string): Promise<Recipe | null> {
   const res = await fetch(`/api/recipes/${id}`);
@@ -22,10 +23,14 @@ export default function CookingModePage({
   const [completedSteps, setCompletedSteps] = useState<Record<number, boolean>>(
     {}
   );
+  const [servings, setServings] = useState(1);
 
   useEffect(() => {
     fetchRecipe(params.id).then((r) => {
-      if (r) setRecipe(r);
+      if (r) {
+        setRecipe(r);
+        setServings(r.servings);
+      }
     });
   }, [params.id]);
 
@@ -37,6 +42,12 @@ export default function CookingModePage({
     );
   }
 
+  const scaleFactor = servings / recipe.servings;
+  const displayText = (text: string) =>
+    recipe.text_scaling_version === 1
+      ? scaleRecipeText(text, recipe.ingredients, scaleFactor)
+      : text;
+
   return (
     <div className="mx-auto max-w-xl space-y-4">
       <header className="sticky top-0 z-10 bg-slate-50/95 pb-2 pt-1 backdrop-blur">
@@ -44,8 +55,34 @@ export default function CookingModePage({
           <div>
             <h2 className="text-lg font-semibold">{recipe.title}</h2>
             <p className="text-xs text-slate-600">
-              Cooking mode · {recipe.prep_time + recipe.cook_time} min
+              Cooking mode · {recipe.prep_time + recipe.cook_time} min · {servings} portion{servings === 1 ? "" : "s"}
             </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setServings((value) => Math.max(1, value - 1))}
+              className="h-7 w-7 rounded-full border border-slate-300 text-sm hover:bg-slate-100"
+              aria-label="Decrease servings"
+            >
+              -
+            </button>
+            <input
+              type="number"
+              min={1}
+              value={servings}
+              onChange={(event) => setServings(Math.max(1, Number(event.target.value) || 1))}
+              className="w-12 rounded-md border border-slate-300 px-1 py-1 text-center text-sm"
+              aria-label="Servings"
+            />
+            <button
+              type="button"
+              onClick={() => setServings((value) => value + 1)}
+              className="h-7 w-7 rounded-full border border-slate-300 text-sm hover:bg-slate-100"
+              aria-label="Increase servings"
+            >
+              +
+            </button>
           </div>
           <a
             href={`/recipes/${recipe.id}`}
@@ -80,7 +117,7 @@ export default function CookingModePage({
                 }
               >
                 <span className="font-medium">
-                  {ing.amount} {ing.unit}
+                  {(ing.amount * scaleFactor).toFixed(2).replace(/\.00$/, "")} {ing.unit}
                 </span>{" "}
                 {ing.name}
               </span>
@@ -122,7 +159,7 @@ export default function CookingModePage({
                     : "text-slate-900"
                 }`}
               >
-                {step.instruction}
+                {displayText(step.instruction)}
               </p>
             </li>
           ))}

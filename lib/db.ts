@@ -1,6 +1,8 @@
 import type { Ingredient, Recipe, Step } from "../types/recipe";
 import { getAdminDb } from "./firebase-admin";
 import { getWeekStartISO, WEEKMENU_SLOT } from "./weekmenu";
+import { normalizeIngredientName } from "./ingredients";
+import { addScalingMarkers } from "./recipe-scaling";
 
 export type ImportQueueStatus = "pending" | "processing" | "failed" | "completed";
 
@@ -41,6 +43,7 @@ function mapRecipeDoc(id: string, data: FirebaseFirestore.DocumentData): Recipe 
     prep_time: Number(data.prep_time) || 0,
     cook_time: Number(data.cook_time) || 0,
     source_url: data.source_url ?? "",
+    text_scaling_version: Number(data.text_scaling_version) || undefined,
     created_at: data.created_at,
     ingredients: (data.ingredients ?? []) as Ingredient[],
     steps: (data.steps ?? []) as Step[]
@@ -110,8 +113,13 @@ export async function createRecipe(userId: string, recipe: Recipe) {
   const docRef = await recipesCol().add({
     userId,
     ...fields,
+    description: addScalingMarkers(fields.description ?? "", ingredients),
     ingredients: normalizeIngredients(ingredients),
-    steps: normalizeSteps(steps),
+    steps: normalizeSteps(steps).map((step) => ({
+      ...step,
+      instruction: addScalingMarkers(step.instruction, ingredients)
+    })),
+    text_scaling_version: 1,
     created_at: now
   });
 
@@ -459,7 +467,8 @@ export async function updateIngredientProfileForUser(
 
 export async function renameIngredientForUser(userId: string, fromName: string, toName: string) {
   const snap = await recipesCol().where("userId", "==", userId).get();
-  const normalizedFrom = fromName.trim().toLocaleLowerCase();
+  const normalizedFrom = normalizeIngredientName(fromName);
+  const normalizedTo = normalizeIngredientName(toName);
   const updates: Array<{ ref: FirebaseFirestore.DocumentReference; ingredients: Ingredient[] }> = [];
   let changedRecipes = 0;
   let changedIngredients = 0;
@@ -468,10 +477,10 @@ export async function renameIngredientForUser(userId: string, fromName: string, 
     const ingredients = (doc.data().ingredients ?? []) as Ingredient[];
     let touched = false;
     const nextIngredients = ingredients.map((ingredient) => {
-      if (ingredient.name.trim().toLocaleLowerCase() !== normalizedFrom) return ingredient;
+      if (normalizeIngredientName(ingredient.name) !== normalizedFrom) return ingredient;
       touched = true;
       changedIngredients += 1;
-      return { ...ingredient, name: toName.trim() };
+      return { ...ingredient, name: normalizedTo };
     });
 
     if (touched) {

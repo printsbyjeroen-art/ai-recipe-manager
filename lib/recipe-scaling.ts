@@ -15,10 +15,12 @@ export function addScalingMarkers(text: string, ingredients: Ingredient[]) {
   let result = text;
   ingredients.forEach((ingredient, index) => {
     const amount = formatAmount(Number(ingredient.amount) || 0);
-    if (!amount || !ingredient.unit?.trim()) return;
+    if (!amount) return;
     const amountPattern = escapeRegExp(amount).replace("\\.", "[.,]");
-    const unitPattern = escapeRegExp(ingredient.unit.trim());
-    result = result.replace(new RegExp(`\\b${amountPattern}\\s*${unitPattern}\\b`, "i"), `{{ingredient:${index}}} ${ingredient.unit}`);
+    const suffix = ingredient.unit?.trim() || ingredient.name?.trim();
+    if (!suffix) return;
+    const suffixPattern = escapeRegExp(suffix);
+    result = result.replace(new RegExp(`\\b${amountPattern}\\s*${suffixPattern}\\b`, "i"), `{{ingredient:${index}}}${ingredient.unit ? ` ${ingredient.unit}` : ""}`);
   });
   return result;
 }

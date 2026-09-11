@@ -4,7 +4,7 @@ import {
   renameIngredientForUser,
   updateIngredientProfileForUser
 } from "../../../lib/db";
-import { guessStoreSection, normalizeIngredientName, normalizeStoreSection } from "../../../lib/ingredients";
+import { guessStoreSection, normalizeIngredientName, normalizeStoreSection, normalizeText } from "../../../lib/ingredients";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -162,8 +162,8 @@ export async function POST(request: Request) {
   }
 
   const fromName = normalizeIngredientName(body.fromName);
-  const toName = normalizeIngredientName(body.toName);
-  if (!fromName || !toName || fromName === toName) {
+  const toName = normalizeText(body.toName);
+  if (!fromName || !toName || fromName === normalizeIngredientName(toName)) {
     return NextResponse.json({ error: "Choose a different ingredient name" }, { status: 400 });
   }
 

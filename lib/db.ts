@@ -1,7 +1,7 @@
 import type { Ingredient, Recipe, Step } from "../types/recipe";
 import { getAdminDb } from "./firebase-admin";
 import { getWeekStartISO, WEEKMENU_SLOT } from "./weekmenu";
-import { normalizeIngredientName } from "./ingredients";
+import { normalizeIngredientName, normalizeText } from "./ingredients";
 import { addScalingMarkers } from "./recipe-scaling";
 
 export type ImportQueueStatus = "pending" | "processing" | "failed" | "completed";
@@ -468,7 +468,7 @@ export async function updateIngredientProfileForUser(
 export async function renameIngredientForUser(userId: string, fromName: string, toName: string) {
   const snap = await recipesCol().where("userId", "==", userId).get();
   const normalizedFrom = normalizeIngredientName(fromName);
-  const normalizedTo = normalizeIngredientName(toName);
+  const replacementName = normalizeText(toName);
   const updates: Array<{ ref: FirebaseFirestore.DocumentReference; ingredients: Ingredient[] }> = [];
   let changedRecipes = 0;
   let changedIngredients = 0;
@@ -480,7 +480,7 @@ export async function renameIngredientForUser(userId: string, fromName: string, 
       if (normalizeIngredientName(ingredient.name) !== normalizedFrom) return ingredient;
       touched = true;
       changedIngredients += 1;
-      return { ...ingredient, name: normalizedTo };
+      return { ...ingredient, name: replacementName };
     });
 
     if (touched) {

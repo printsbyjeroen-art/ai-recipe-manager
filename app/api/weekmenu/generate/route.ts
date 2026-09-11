@@ -12,8 +12,13 @@ function shuffle<T>(arr: T[]) {
 }
 
 export async function POST(request: Request) {
-  const body = (await request.json().catch(() => ({}))) as { week_start?: string; userId?: string };
+  const body = (await request.json().catch(() => ({}))) as {
+    week_start?: string;
+    userId?: string;
+    standard_portions?: number;
+  };
   const weekStart = body.week_start || getWeekStartISO();
+  const standardPortions = Math.max(1, Math.floor(Number(body.standard_portions) || 4));
 
   if (!body.userId) {
     return NextResponse.json({ error: "Missing userId" }, { status: 400 });
@@ -28,7 +33,7 @@ export async function POST(request: Request) {
       return {
         day_of_week: day,
         recipe_id: picked?.id ?? null,
-        planned_servings: picked?.servings ?? null
+        planned_servings: picked ? standardPortions : null
       };
     });
 

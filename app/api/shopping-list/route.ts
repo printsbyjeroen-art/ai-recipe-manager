@@ -32,15 +32,23 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const userId = searchParams.get("userId");
   const weekStart = searchParams.get("week_start") || getWeekStartISO();
+  const dayParam = searchParams.get("day_of_week");
+  const dayOfWeek = dayParam === null ? null : Number(dayParam);
 
   if (!userId) {
     return NextResponse.json({ error: "Missing userId" }, { status: 400 });
+  }
+  if (dayOfWeek !== null && (!Number.isInteger(dayOfWeek) || dayOfWeek < 0 || dayOfWeek > 6)) {
+    return NextResponse.json({ error: "Invalid day_of_week" }, { status: 400 });
   }
 
   try {
     const menu = await getWeekMenuItems(userId, weekStart);
     const menuItems = (menu.items ?? []).filter(
-      (item) => item.meal_slot === WEEKMENU_SLOT && item.recipe_id
+      (item) =>
+        item.meal_slot === WEEKMENU_SLOT &&
+        item.recipe_id &&
+        (dayOfWeek === null || item.day_of_week === dayOfWeek)
     );
 
     const recipeIds = [...new Set(menuItems.map((item) => item.recipe_id).filter(Boolean))] as string[];

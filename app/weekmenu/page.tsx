@@ -31,6 +31,7 @@ export default function WeekMenuPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [standardPortions, setStandardPortions] = useState(4);
 
   const itemMap = useMemo(() => {
     const map = new Map<string, WeekMenuItem>();
@@ -129,7 +130,11 @@ export default function WeekMenuPage() {
       const res = await fetch("/api/weekmenu/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ week_start: weekStart || undefined, userId: user.uid })
+        body: JSON.stringify({
+          week_start: weekStart || undefined,
+          userId: user.uid,
+          standard_portions: standardPortions
+        })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to generate");
@@ -169,7 +174,7 @@ export default function WeekMenuPage() {
     }
   };
 
-  const exportToShoppingList = async () => {
+  const exportToShoppingList = async (day?: number) => {
     setExporting(true);
     setError(null);
     setMessage(null);
@@ -181,6 +186,9 @@ export default function WeekMenuPage() {
       const params = new URLSearchParams({ userId: user.uid });
       if (weekStart) {
         params.set("week_start", weekStart);
+      }
+      if (day !== undefined) {
+        params.set("day_of_week", String(day));
       }
 
       const res = await fetch(`/api/shopping-list?${params.toString()}`);
@@ -222,12 +230,12 @@ export default function WeekMenuPage() {
           <div className="flex flex-col gap-2 sm:flex-row">
             <motion.button
               type="button"
-              onClick={exportToShoppingList}
+              onClick={() => exportToShoppingList()}
               disabled={exporting || loading}
               className="rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
               whileTap={{ scale: 0.97 }}
             >
-              {exporting ? "Exporting..." : "Export to shopping list"}
+              {exporting ? "Exporting..." : "Export week to shopping list"}
             </motion.button>
             <motion.a
               href="/shopping-list"
@@ -236,15 +244,28 @@ export default function WeekMenuPage() {
             >
               Open shopping list
             </motion.a>
-            <motion.button
-              type="button"
-              onClick={generate}
-              disabled={generating || loading}
-              className="rounded-md bg-emerald-600 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
-              whileTap={{ scale: 0.97 }}
-            >
-              {generating ? "Generating…" : "Auto-pick dinners"}
-            </motion.button>
+            <div className="flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1">
+              <label htmlFor="standard-portions" className="text-xs font-semibold text-emerald-900">
+                Standard portions
+              </label>
+              <input
+                id="standard-portions"
+                type="number"
+                min={1}
+                value={standardPortions}
+                onChange={(e) => setStandardPortions(Math.max(1, Number(e.target.value) || 1))}
+                className="w-16 rounded border border-emerald-300 bg-white px-2 py-1 text-sm"
+              />
+              <motion.button
+                type="button"
+                onClick={generate}
+                disabled={generating || loading}
+                className="rounded-md bg-emerald-600 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+                whileTap={{ scale: 0.97 }}
+              >
+                {generating ? "Generating…" : "Auto-pick dinners"}
+              </motion.button>
+            </div>
             <motion.button
               type="button"
               onClick={load}
@@ -272,6 +293,15 @@ export default function WeekMenuPage() {
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <h3 className="text-base font-semibold">{day.label}</h3>
               <div className="flex gap-2">
+                <motion.button
+                  type="button"
+                  onClick={() => exportToShoppingList(day.idx)}
+                  disabled={exporting || loading}
+                  className="rounded-md border border-blue-300 bg-white px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
+                  whileTap={{ scale: 0.97 }}
+                >
+                  Export day
+                </motion.button>
                 <motion.button
                   type="button"
                   onClick={() => replaceDinner(day.idx)}

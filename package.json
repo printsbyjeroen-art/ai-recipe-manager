@@ -10,6 +10,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "test:shopping-list": "tsc --target ES2020 --module commonjs --moduleResolution node --esModuleInterop --skipLibCheck --strict --outDir .next/shopping-list-tests tests/shopping-list.test.ts && node --test .next/shopping-list-tests/tests/shopping-list.test.js",
     "translate:recipes:nl": "node scripts/translate-existing-recipes.mjs"
   },
   "dependencies": {

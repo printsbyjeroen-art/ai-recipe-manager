@@ -98,15 +98,16 @@ export function mergeShoppingListItems(
   const map = new Map<string, PersistedShoppingListItem>();
 
   for (const item of existing) {
-    map.set(item.key || buildShoppingListItemKey(item.name, item.unit, item.store_section), {
+    const key = buildShoppingListItemKey(item.name, item.unit, item.store_section);
+    map.set(key, {
       ...item,
-      key: item.key || buildShoppingListItemKey(item.name, item.unit, item.store_section),
+      key,
       store_section: normalizeStoreSection(item.store_section)
     });
   }
 
   for (const item of additions) {
-    const key = item.key || buildShoppingListItemKey(item.name, item.unit, item.store_section);
+    const key = buildShoppingListItemKey(item.name, item.unit, item.store_section);
     const nextItem: PersistedShoppingListItem = {
       ...item,
       key,
@@ -134,7 +135,7 @@ export function mergeShoppingListItems(
       amount: Number(((current.amount || 0) + (nextItem.amount || 0)).toFixed(2)),
       store_section: normalizeStoreSection(current.store_section || nextItem.store_section),
       checked: current.checked ?? false,
-      isCustom: current.isCustom || nextItem.isCustom,
+      isCustom: Boolean(current.isCustom || nextItem.isCustom),
       recipeCount: recipeMap.size || current.recipeCount || nextItem.recipeCount || 0,
       recipes: [...recipeMap.values()].sort((a, b) => a.title.localeCompare(b.title))
     });
@@ -150,33 +151,15 @@ export function readShoppingListFromStorage(userId: string): PersistedShoppingLi
   const keysToTry = [currentKey, ...getLegacyShoppingListStorageKeys(userId)];
 
   for (const key of keysToTry) {
-    try {
-      const raw = window.localStorage.getItem(key);
-      if (!raw) continue;
+    const raw = window.localStorage.getItem(key);
+    if (!raw) continue;
 
-      const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed)) continue;
-
-      if (key !== currentKey) {
-        window.localStorage.setItem(currentKey, JSON.stringify(parsed));
-      }
-
-      return parsed;
-    } catch {
-      // Try the next legacy key if one exists.
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      throw new Error("The existing shopping list could not be read. Your browser data has not been changed.");
     }
+    return parsed;
   }
 
   return [];
-}
-
-export function writeShoppingListToStorage(userId: string, items: PersistedShoppingListItem[]) {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(getShoppingListStorageKey(userId), JSON.stringify(items));
-}
-
-export function mergeIntoShoppingList(userId: string, additions: PersistedShoppingListItem[]) {
-  const merged = mergeShoppingListItems(readShoppingListFromStorage(userId), additions);
-  writeShoppingListToStorage(userId, merged);
-  return merged;
 }

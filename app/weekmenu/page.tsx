@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { mergeIntoShoppingList } from "../../lib/shopping-list-storage";
+import { mergeIntoShoppingList } from "../../lib/shopping-list-client";
 import { getCurrentUser } from "../../lib/auth-client";
 import { WEEK_DAYS, WEEKMENU_SLOT } from "../../lib/weekmenu";
 
@@ -197,7 +197,7 @@ export default function WeekMenuPage() {
         throw new Error(data.error || "Failed to export shopping list");
       }
 
-      const merged = mergeIntoShoppingList(
+      const merged = await mergeIntoShoppingList(
         user.uid,
         (data.items ?? []).map((item: any) => ({ ...item, checked: false, isCustom: false }))
       );
@@ -398,4 +398,3 @@ export default function WeekMenuPage() {
     </div>
   );
 }
-

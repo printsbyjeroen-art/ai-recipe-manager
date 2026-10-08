@@ -2,10 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  buildShoppingListItemsFromRecipe,
-  mergeIntoShoppingList
-} from "../../../lib/shopping-list-storage";
+import { buildShoppingListItemsFromRecipe } from "../../../lib/shopping-list-storage";
+import { mergeIntoShoppingList } from "../../../lib/shopping-list-client";
 import { getCurrentUser } from "../../../lib/auth-client";
 import { scaleRecipeText } from "../../../lib/recipe-scaling";
 import type { Recipe } from "../../../types/recipe";
@@ -168,7 +166,7 @@ export default function RecipeDetailClient({ recipe }: Props) {
         return;
       }
 
-      mergeIntoShoppingList(user.uid, additions);
+      await mergeIntoShoppingList(user.uid, additions);
       setListMessage(
         `${current.title} added to your shopping list for ${servings} portion${servings === 1 ? "" : "s"}.`
       );
@@ -622,4 +620,3 @@ export default function RecipeDetailClient({ recipe }: Props) {
     </div>
   );
 }
-

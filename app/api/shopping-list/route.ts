@@ -7,6 +7,7 @@ import {
 } from "../../../lib/ingredients";
 import { getRecipeById, getWeekMenuItems } from "../../../lib/db";
 import { getWeekStartISO, WEEKMENU_SLOT } from "../../../lib/weekmenu";
+import { buildShoppingListItemKey } from "../../../lib/shopping-list-storage";
 
 type ShoppingListRecipeRef = {
   id: string;
@@ -23,10 +24,6 @@ type ShoppingListItem = {
   recipeCount: number;
   recipes: ShoppingListRecipeRef[];
 };
-
-function buildKey(name: string, unit: string, storeSection: string) {
-  return `${name}::${unit}::${normalizeStoreSection(storeSection)}`;
-}
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -85,7 +82,7 @@ export async function GET(request: Request) {
         const storeSection = normalizeStoreSection(
           ingredient.store_section || guessStoreSection(ingredient.name)
         );
-        const key = buildKey(normalizedName, normalizedUnit.unit, storeSection);
+        const key = buildShoppingListItemKey(normalizedName, normalizedUnit.unit, storeSection);
         const normalizedAmount =
           (Number(ingredient.amount) || 0) * normalizedUnit.multiplier * portionScale;
         const existing = grouped.get(key);

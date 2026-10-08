@@ -2,10 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import {
-  buildShoppingListItemsFromRecipe,
-  mergeIntoShoppingList
-} from "../lib/shopping-list-storage";
+import { buildShoppingListItemsFromRecipe } from "../lib/shopping-list-storage";
+import { mergeIntoShoppingList } from "../lib/shopping-list-client";
 import type { MealType, DishType, Recipe } from "../types/recipe";
 import RecipeModal from "./RecipeModal";
 import { getCurrentUserId } from "../lib/auth-client";
@@ -132,7 +130,7 @@ export default function DashboardPage() {
         return;
       }
 
-      mergeIntoShoppingList(userId, additions);
+      await mergeIntoShoppingList(userId, additions);
       setShoppingListMessage(
         `${fullRecipe.title} added to your shopping list for ${selectedPortions} portion${selectedPortions === 1 ? "" : "s"}. It will stay there until you delete it manually.`
       );
@@ -374,4 +372,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-

@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   displayStoreSection,
@@ -9,12 +9,10 @@ import {
 } from "../../lib/ingredients";
 import {
   buildShoppingListItemKey,
-  mergeIntoShoppingList,
-  mergeShoppingListItems,
-  type PersistedShoppingListItem,
-  readShoppingListFromStorage,
-  writeShoppingListToStorage
+  type PersistedShoppingListItem
 } from "../../lib/shopping-list-storage";
+import { changeShoppingList, loadShoppingList } from "../../lib/shopping-list-client";
+import type { ShoppingListOperation, ShoppingListSnapshot } from "../../lib/shopping-list-operations";
 import { getCurrentUser } from "../../lib/auth-client";
 
 type ShoppingListEdit = {
@@ -56,9 +54,14 @@ function buildWhatsAppText(items: PersistedShoppingListItem[]) {
 export default function ShoppingListPage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [items, setItems] = useState<PersistedShoppingListItem[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [ready, setReady] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const revision = useRef(0);
+  const mutationPending = useRef(false);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [openItems, setOpenItems] = useState<Record<string, boolean>>({});
   const [newItem, setNewItem] = useState<ShoppingListEdit>({
@@ -78,7 +81,7 @@ export default function ShoppingListPage() {
   useEffect(() => {
     const load = async () => {
       setLoading(true);
-      setError(null);
+      setSyncError(null);
       try {
         const user = await getCurrentUser();
         if (!user) {
@@ -86,10 +89,8 @@ export default function ShoppingListPage() {
         }
 
         setUserId(user.uid);
-        setItems(readShoppingListFromStorage(user.uid));
       } catch (err: any) {
         setError(err.message || "Failed to load shopping list");
-      } finally {
         setLoading(false);
       }
     };
@@ -97,10 +98,66 @@ export default function ShoppingListPage() {
     load();
   }, []);
 
-  function saveItems(nextItems: PersistedShoppingListItem[]) {
-    setItems(nextItems);
-    if (userId) {
-      writeShoppingListToStorage(userId, nextItems);
+  function applySnapshot(snapshot: ShoppingListSnapshot) {
+    if (snapshot.revision >= revision.current) {
+      revision.current = snapshot.revision;
+      setItems(snapshot.items);
+    }
+  }
+
+  useEffect(() => {
+    if (!userId) return;
+    let active = true;
+    let refreshing = false;
+    revision.current = 0;
+    setReady(false);
+    setLoading(true);
+
+    const refresh = async () => {
+      if (refreshing || document.visibilityState === "hidden") return;
+      refreshing = true;
+      try {
+        const snapshot = await loadShoppingList(userId);
+        if (active) {
+          applySnapshot(snapshot);
+          setReady(true);
+          setError(null);
+        }
+      } catch (err) {
+        if (active) setSyncError(err instanceof Error ? err.message : "Failed to synchronize shopping list.");
+      } finally {
+        refreshing = false;
+        if (active) setLoading(false);
+      }
+    };
+    void refresh();
+    const interval = window.setInterval(() => void refresh(), 10000);
+    const onFocus = () => void refresh();
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
+    };
+  }, [userId]);
+
+  async function saveOperation(operation: ShoppingListOperation) {
+    if (!userId || !ready || mutationPending.current) return false;
+    mutationPending.current = true;
+    setSaving(true);
+    setError(null);
+    setMessage(null);
+    try {
+      applySnapshot(await changeShoppingList(userId, operation));
+      return true;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to save shopping list.");
+      return false;
+    } finally {
+      mutationPending.current = false;
+      setSaving(false);
     }
   }
 
@@ -118,17 +175,16 @@ export default function ShoppingListPage() {
         throw new Error(data.error || "Failed to export current week menu");
       }
 
-      const merged = mergeIntoShoppingList(
-        userId,
-        (data.items ?? []).map((item: PersistedShoppingListItem) => ({
+      const saved = await saveOperation({
+        type: "add",
+        items: (data.items ?? []).map((item: PersistedShoppingListItem) => ({
           ...item,
           checked: false,
           isCustom: false
         }))
-      );
+      });
 
-      setItems(merged);
-      setMessage(
+      if (saved) setMessage(
         `Exported ${(data.items ?? []).length} ingredient${(data.items ?? []).length === 1 ? "" : "s"}. Your list keeps everything until you delete it.`
       );
     } catch (err: any) {
@@ -138,8 +194,8 @@ export default function ShoppingListPage() {
     }
   }
 
-  function toggleChecked(key: string, value: boolean) {
-    saveItems(items.map((item) => (item.key === key ? { ...item, checked: value } : item)));
+  async function toggleChecked(key: string, value: boolean) {
+    await saveOperation({ type: "check", key, checked: value });
   }
 
   function beginEdit(item: PersistedShoppingListItem) {
@@ -152,33 +208,24 @@ export default function ShoppingListPage() {
     });
   }
 
-  function saveEdit() {
+  async function saveEdit() {
     if (!editingKey) return;
 
     const trimmedName = editDraft.name.trim();
     if (!trimmedName) return;
 
-    const updatedItems = items.map((item) => {
-      if (item.key !== editingKey) {
-        return item;
-      }
-
-      const nextSection = normalizeStoreSection(editDraft.store_section);
-      return {
-        ...item,
-        key: buildShoppingListItemKey(trimmedName, editDraft.unit.trim(), nextSection),
-        name: trimmedName,
-        amount: parseAmount(editDraft.amount),
-        unit: editDraft.unit.trim(),
-        store_section: nextSection
-      };
+    const saved = await saveOperation({
+      type: "edit",
+      key: editingKey,
+      name: trimmedName,
+      amount: parseAmount(editDraft.amount),
+      unit: editDraft.unit.trim(),
+      store_section: normalizeStoreSection(editDraft.store_section)
     });
-
-    saveItems(mergeShoppingListItems([], updatedItems));
-    setEditingKey(null);
+    if (saved) setEditingKey(null);
   }
 
-  function addCustomItem(event: FormEvent<HTMLFormElement>) {
+  async function addCustomItem(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const name = newItem.name.trim();
     if (!name) return;
@@ -195,31 +242,32 @@ export default function ShoppingListPage() {
       isCustom: true
     };
 
-    saveItems(mergeShoppingListItems(items, [item]));
-    setNewItem({ name: "", amount: "1", unit: "", store_section: "miscellaneous" });
-    setMessage(`${name} added to your shopping list.`);
+    if (await saveOperation({ type: "add", items: [item] })) {
+      setNewItem({ name: "", amount: "1", unit: "", store_section: "miscellaneous" });
+      setMessage(`${name} added to your shopping list.`);
+    }
   }
 
-  function deleteItem(item: PersistedShoppingListItem) {
-    saveItems(items.filter((entry) => entry.key !== item.key));
-    if (editingKey === item.key) {
+  async function deleteItem(item: PersistedShoppingListItem) {
+    if (await saveOperation({ type: "remove", key: item.key }) && editingKey === item.key) {
       setEditingKey(null);
     }
   }
 
-  function clearWholeList() {
+  async function clearWholeList() {
     if (!window.confirm("Delete the whole shopping list?")) {
       return;
     }
 
-    saveItems([]);
-    setOpenItems({});
-    setEditingKey(null);
-    setMessage("Shopping list cleared.");
+    if (await saveOperation({ type: "clear" })) {
+      setOpenItems({});
+      setEditingKey(null);
+      setMessage("Shopping list cleared.");
+    }
   }
 
-  function clearChecks() {
-    saveItems(items.map((item) => ({ ...item, checked: false })));
+  async function clearChecks() {
+    await saveOperation({ type: "uncheck" });
   }
 
   function shareViaWhatsApp() {
@@ -259,7 +307,7 @@ export default function ShoppingListPage() {
   }, [items]);
 
   return (
-    <div className="space-y-4">
+    <fieldset disabled={loading || saving || exporting || !ready} className="min-w-0 space-y-4">
       <motion.section
         className="rounded-lg bg-white p-4 shadow-sm"
         initial={{ opacity: 0, y: 8 }}
@@ -269,7 +317,7 @@ export default function ShoppingListPage() {
           <div>
             <h2 className="text-lg font-semibold">Shopping list</h2>
             <p className="text-sm text-slate-600">
-              Your all-in-one shopping list stays here until you manually delete the list or remove individual items. Nothing auto-deletes.
+              Your list is saved to your account and syncs across browsers and devices. Nothing auto-deletes.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -312,10 +360,12 @@ export default function ShoppingListPage() {
         </div>
 
         {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+        {syncError && <p className="mt-2 text-sm text-red-600">{syncError}</p>}
         {message && <p className="mt-2 text-sm text-emerald-700">{message}</p>}
         {loading && <p className="mt-2 text-sm text-slate-600">Loading...</p>}
+        {saving && <p className="mt-2 text-sm text-slate-600">Saving...</p>}
 
-        {!loading && !error && (
+        {ready && !error && (
           <div className="mt-3 flex flex-wrap gap-2 text-sm text-slate-600">
             <span className="rounded-full bg-slate-100 px-3 py-1">Checked {checkedCount} of {items.length}</span>
             <span className="rounded-full bg-slate-100 px-3 py-1">My own items: {customCount}</span>
@@ -382,7 +432,7 @@ export default function ShoppingListPage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
       >
-        {groupedItems.length === 0 && !loading ? (
+        {groupedItems.length === 0 && ready ? (
           <p className="text-sm text-slate-600">
             Your shopping list is empty right now. Export your week menu or add your own items.
           </p>
@@ -548,6 +598,6 @@ export default function ShoppingListPage() {
           </div>
         )}
       </motion.section>
-    </div>
+    </fieldset>
   );
 }
